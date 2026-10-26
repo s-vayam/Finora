@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F5F5F2;
+    color: #111111;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom scrollbar for clean minimalist aesthetic */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #F5F5F2;
+}
+::-webkit-scrollbar-thumb {
+  background: #D5D5CF;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #B0B2AA;
+}
+
+/* Accessible focus ring with dark high contrast */
+:focus-visible {
+  outline: 2px solid #111111 !important;
+  outline-offset: 2px !important;
+}
+
+/* Clean financial card utility */
+.pro-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E7E7E2;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.pro-card-dark {
+  background-color: #111111;
+  border: 1px solid #222222;
+  border-radius: 12px;
+  color: #FFFFFF;
+}

@@ -1,0 +1,119 @@
+{
+  "USD": {
+    "currency": "USD",
+    "selected_regressor": "hist_gradient_boosting",
+    "selected_classifier": "logistic_regression",
+    "regressor_comparison": {
+      "random_walk_baseline": {
+        "rmse_return": 0.015306354077034498,
+        "mae_rate": 0.7915105687693899
+      },
+      "ridge": {
+        "rmse_return": 0.015626317432114085,
+        "mae_rate": 0.8236842338967465,
+        "rmse_improvement_vs_baseline": -0.00031996335507958676
+      },
+      "hist_gradient_boosting": {
+        "rmse_return": 0.020955295202608522,
+        "mae_rate": 1.1191096882798175,
+        "rmse_improvement_vs_baseline": -0.0056489411255740245
+      }
+    },
+    "classifier_comparison": {
+      "dummy_baseline": {
+        "accuracy": 0.48986556359875905,
+        "macro_f1": 0.21919900048587493
+      },
+      "logistic_regression": {
+        "accuracy": 0.4576008273009307,
+        "macro_f1": 0.31875762543901437,
+        "f1_improvement_vs_baseline": 0.09955862495313944
+      },
+      "hist_gradient_boosting": {
+        "accuracy": 0.41944157187176834,
+        "macro_f1": 0.21882798968347708,
+        "f1_improvement_vs_baseline": -0.00037101080239784756
+      }
+    },
+    "regressor_artifact": "C:\\Users\\Svayam\\PROJECTTTT\\Finora\\backend\\ml\\fx\\artifacts\\fx_regressor_usd.joblib",
+    "classifier_artifact": "C:\\Users\\Svayam\\PROJECTTTT\\Finora\\backend\\ml\\fx\\artifacts\\fx_classifier_usd.joblib"
+  },
+  "EUR": {
+    "currency": "EUR",
+    "selected_regressor": "ridge",
+    "selected_classifier": "logistic_regression",
+    "regressor_comparison": {
+      "random_walk_baseline": {
+        "rmse_return": 0.018786468190584375,
+        "mae_rate": 1.1445021012216408
+      },
+      "ridge": {
+        "rmse_return": 0.018729502934362752,
+        "mae_rate": 1.1338097905958073,
+        "rmse_improvement_vs_baseline": 5.696525622162288e-05
+      },
+      "hist_gradient_boosting": {
+        "rmse_return": 0.020878697810754857,
+        "mae_rate": 1.266140663215989,
+        "rmse_improvement_vs_baseline": -0.002092229620170482
+      }
+    },
+    "classifier_comparison": {
+      "dummy_baseline": {
+        "accuracy": 0.42017452006980804,
+        "macro_f1": 0.1972407917158212
+      },
+      "logistic_regression": {
+        "accuracy": 0.5158813263525306,
+        "macro_f1": 0.3528247559314765,
+        "f1_improvement_vs_baseline": 0.1555839642156553
+      },
+      "hist_gradient_boosting": {
+        "accuracy": 0.5111692844677138,
+        "macro_f1": 0.3445885351436488,
+        "f1_improvement_vs_baseline": 0.14734774342782758
+      }
+    },
+    "regressor_artifact": "C:\\Users\\Svayam\\PROJECTTTT\\Finora\\backend\\ml\\fx\\artifacts\\fx_regressor_eur.joblib",
+    "classifier_artifact": "C:\\Users\\Svayam\\PROJECTTTT\\Finora\\backend\\ml\\fx\\artifacts\\fx_classifier_eur.joblib"
+  },
+  "GBP": {
+    "currency": "GBP",
+    "selected_regressor": "hist_gradient_boosting",
+    "selected_classifier": "hist_gradient_boosting",
+    "regressor_comparison": {
+      "random_walk_baseline": {
+        "rmse_return": 0.021540099884914923,
+        "mae_rate": 1.484132612892106
+      },
+      "ridge": {
+        "rmse_return": 0.021721995929709415,
+        "mae_rate": 1.5148935151214604,
+        "rmse_improvement_vs_baseline": -0.00018189604479449187
+      },
+      "hist_gradient_boosting": {
+        "rmse_return": 0.029725183350917107,
+        "mae_rate": 2.0455417445181188,
+        "rmse_improvement_vs_baseline": -0.008185083466002184
+      }
+    },
+    "classifier_comparison": {
+      "dummy_baseline": {
+        "accuracy": 0.4869010685970355,
+        "macro_f1": 0.21830686604072483
+      },
+      "logistic_regression": {
+        "accuracy": 0.4947604274388142,
+        "macro_f1": 0.32084240873872055,
+        "f1_improvement_vs_baseline": 0.10253554269799572
+      },
+      "hist_gradient_boosting": {
+        "accuracy": 0.512788693553947,
+        "macro_f1": 0.34905899529601775,
+        "f1_improvement_vs_baseline": 0.13075212925529292
+      }
+    },
+    "regressor_artifact": "C:\\Users\\Svayam\\PROJECTTTT\\Finora\\backend\\ml\\fx\\artifacts\\fx_regressor_gbp.joblib",
+    "classifier_artifact": "C:\\Users\\Svayam\\PROJECTTTT\\Finora\\backend\\ml\\fx\\artifacts\\fx_classifier_gbp.joblib"
+  }
+}

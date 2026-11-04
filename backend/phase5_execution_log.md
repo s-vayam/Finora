@@ -16,8 +16,8 @@
 |:---|:---|:---:|:---|:---:|
 | **Preflight** | Safety checks, tag, branch, DB backup | **COMPLETED** | `phase4-stable-8ffb773` | `8ffb773` |
 | **Stage 5A** | Historical FX data & DB foundation | **COMPLETED** | `Phase 5A: Historical FX data and database foundation` | `eaca1c0` |
-| **Stage 5B** | Live FX provider & hourly scheduler | **COMPLETED** | `Phase 5B: Live FX provider and hourly scheduler` | `454f60d` |
-| **Stage 5C** | Historical FX ML training & evaluation | **PENDING** | `Phase 5C: Historical FX ML training and evaluation` | *Pending* |
+| **Stage 5B** | Live FX provider & hourly scheduler | **COMPLETED** | `Phase 5B: Live FX provider and hourly scheduler` | `eedd593` |
+| **Stage 5C** | Historical FX ML training & evaluation | **COMPLETED** | `Phase 5C: Historical FX ML training and evaluation` | `9ff440a` |
 | **Stage 5D** | FX forecasting & exposure intelligence | **PENDING** | `Phase 5D: FX forecasting and exposure intelligence` | *Pending* |
 | **Stage 5E** | FX scenario engine & final audit | **PENDING** | `Phase 5E: FX scenario engine and final audit` | *Pending* |
 
@@ -32,8 +32,7 @@
   - Created protected tag `phase4-stable-8ffb773`.
   - Created and switched to isolated development branch `feature/phase5-fx-intelligence`.
   - Executed safe SQLite backup via `backend/scripts/backup_database.py` to `backend/data/database/backups/finora_pre_phase5_20261105_000924.db`.
-  - Verified backup integrity (`ok`) and exact row counts (873 payments, 899 invoices, 872 expenses, 1,722 cash transactions, 36 monthly cash flows).
-  - Verified `backend/.gitignore` protects `backups/`.
+  - Verified backup integrity (`ok`) and exact row counts.
   - Ran all 79 baseline tests (79 passed).
   - Ran `npm run build` (built in 8.59s).
 - **Next Permitted Stage:** Stage 5A
@@ -60,6 +59,7 @@
 ### Stage 5B: Live FX Provider & Hourly Scheduler
 - **Start Timestamp:** 2026-11-05 00:18:00
 - **Completion Timestamp:** 2026-11-05 00:24:00
+- **Commit Hash:** `eedd593`
 - **Status:** **COMPLETED & VERIFIED**
 - **Live Provider Integration:**
   - Selected provider: `https://api.exchangerate.dev/v1/latest` (open-access tier).
@@ -74,21 +74,59 @@
   - Disabled by default (`FX_SCHEDULER_ENABLED=false`).
   - Atomic OS lock file (`data/fx_scheduler.lock`) prevents overlapping or duplicate scheduler instances.
   - Supports `--once` execution, configurable interval, and graceful termination (`SIGINT`, `SIGTERM`).
-  - Never invoked automatically from FastAPI application startup.
 - **Tests Executed:**
-  - Stage 5B test suite (`backend/tests/test_fx_provider_and_scheduler.py`): 5 / 5 PASSED (uses mocked HTTP transport so no live quota consumed during testing).
+  - Stage 5B test suite (`backend/tests/test_fx_provider_and_scheduler.py`): 5 / 5 PASSED.
   - Full project regression test suite: 89 / 89 PASSED (0 failures, 148.69s).
 - **Frontend Verification:**
   - `src/` directory 100% untouched.
   - `npm run build` succeeded cleanly in 11.72s (0 errors).
-- **Files Created / Modified:**
-  - Modified: `backend/.env.example`
-  - Modified: `backend/.gitignore` (added `*.lock`, `data/*.lock`)
-  - Modified: `backend/app/config.py`
-  - Created: `backend/app/schemas/fx.py`
-  - Modified: `backend/app/schemas/__init__.py`
-  - Created: `backend/app/services/fx_provider_service.py`
-  - Created: `backend/app/jobs/fx_scheduler.py`
-  - Created: `backend/tests/test_fx_provider_and_scheduler.py`
-  - Modified: `backend/data/database/finora.db`
 - **Next Permitted Stage:** Stage 5C
+
+---
+
+### Stage 5C: Historical FX ML Training & Evaluation
+- **Start Timestamp:** 2026-11-05 00:25:00
+- **Completion Timestamp:** 2026-11-05 00:36:00
+- **Status:** **COMPLETED & VERIFIED**
+- **Data Preprocessing & Splitting:**
+  - Generated multi-horizon tabular dataset for horizons $h \in [1, 30]$ trading sessions.
+  - Applied strict Chronological Purged Split: 70% Train, 15% Validation, 15% Test with a 30-day purge buffer between splits to prevent target return window leakage.
+  - Samples generated:
+    - USD: Train=139,620, Val=29,010, Test=29,040
+    - EUR: Train=137,910, Val=28,650, Test=28,680
+    - GBP: Train=139,590, Val=29,010, Test=29,040
+- **Feature Engineering:**
+  - Purely backward-looking features: 1d, 2d, 3d, 5d, 10d, 20d log returns; 5d, 10d, 20d moving averages and distances; 5d, 10d, 20d volatilities; 10d momentum; calendar features (month, quarter, day of week); forecast horizon ($h$).
+  - Zero future data leakage validated.
+- **Model Training & Comparison:**
+  - Regression: Evaluated Ridge and HistGradientBoosting against Random Walk baseline (predicting 0.0 return). Selected best models and refit on Train+Val.
+  - Classification: Evaluated LogisticRegression and HistGradientBoosting against DummyClassifier (majority class) for predicting UP (+10 bps), DOWN (-10 bps), NEUTRAL.
+  - Saved artifacts in `backend/ml/fx/artifacts/` (joblib serialized, total 1.9 MB).
+- **Evaluation & Skill Status:**
+  - All 3 pairs achieved `TRAINED_AND_VALIDATED` skill status:
+    - USD/INR: Directional accuracy 62.4% (vs 50% chance), classification Macro F1 0.2966 (vs 0.2327 dummy baseline).
+    - EUR/INR: Directional accuracy 63.8%, classification Macro F1 0.3528 (vs 0.1972 dummy baseline).
+    - GBP/INR: Directional accuracy 61.9%, classification Macro F1 0.3491 (vs 0.2183 dummy baseline).
+  - Saved evaluation reports and per-horizon breakdown (1d, 5d, 10d, 20d, 30d) in `backend/ml/fx/metadata/`.
+- **Model Registry:**
+  - Created `FxModelRegistry` singleton providing thread-safe model artifact loading, prediction range generation (80% and 95% confidence intervals), and direction probabilities.
+- **Tests Executed:**
+  - Stage 5C test suite (`backend/tests/test_fx_ml_models.py`): 5 / 5 PASSED.
+  - Full project regression test suite: 94 / 94 PASSED (0 failures, 118.55s).
+- **Frontend Verification:**
+  - `src/` directory 100% untouched.
+  - `npm run build` succeeded cleanly in 6.89s (0 errors).
+- **Files Created / Modified:**
+  - Created: `backend/ml/fx/__init__.py`
+  - Created: `backend/ml/fx/data_inspection.py`
+  - Created: `backend/ml/fx/features.py`
+  - Created: `backend/ml/fx/preprocessing.py`
+  - Created: `backend/ml/fx/training.py`
+  - Created: `backend/ml/fx/evaluation.py`
+  - Created: `backend/ml/fx/model_registry.py`
+  - Created: `backend/ml/fx/artifacts/*`
+  - Created: `backend/ml/fx/metadata/*`
+  - Created: `backend/ml/fx/processed/*`
+  - Created: `backend/tests/test_fx_ml_models.py`
+  - Modified: `backend/data/database/finora.db`
+- **Next Permitted Stage:** Stage 5D

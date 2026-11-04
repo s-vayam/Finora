@@ -13,6 +13,8 @@ from app.models.expense_forecast_assumption import ExpenseForecastAssumption
 from app.models.cashflow_forecast_run import CashflowForecastRun
 from app.models.fx_rate_observation import FxRateObservation
 from app.models.fx_fetch_run import FxFetchRun
+from app.models.fx_forecast import FxForecast
+from app.models.fx_scenario_run import FxScenarioRun
 
 __all__ = [
     "Base",
@@ -30,4 +32,6 @@ __all__ = [
     "CashflowForecastRun",
     "FxRateObservation",
     "FxFetchRun",
+    "FxForecast",
+    "FxScenarioRun",
 ]

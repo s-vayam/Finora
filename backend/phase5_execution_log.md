@@ -17,8 +17,8 @@
 | **Preflight** | Safety checks, tag, branch, DB backup | **COMPLETED** | `phase4-stable-8ffb773` | `8ffb773` |
 | **Stage 5A** | Historical FX data & DB foundation | **COMPLETED** | `Phase 5A: Historical FX data and database foundation` | `eaca1c0` |
 | **Stage 5B** | Live FX provider & hourly scheduler | **COMPLETED** | `Phase 5B: Live FX provider and hourly scheduler` | `eedd593` |
-| **Stage 5C** | Historical FX ML training & evaluation | **COMPLETED** | `Phase 5C: Historical FX ML training and evaluation` | `9ff440a` |
-| **Stage 5D** | FX forecasting & exposure intelligence | **PENDING** | `Phase 5D: FX forecasting and exposure intelligence` | *Pending* |
+| **Stage 5C** | Historical FX ML training & evaluation | **COMPLETED** | `Phase 5C: Historical FX ML training and evaluation` | `e66ac34` |
+| **Stage 5D** | FX forecasting & exposure intelligence | **COMPLETED** | `Phase 5D: FX forecasting and exposure intelligence` | *In-Progress* |
 | **Stage 5E** | FX scenario engine & final audit | **PENDING** | `Phase 5E: FX scenario engine and final audit` | *Pending* |
 
 ---
@@ -130,3 +130,37 @@
   - Created: `backend/tests/test_fx_ml_models.py`
   - Modified: `backend/data/database/finora.db`
 - **Next Permitted Stage:** Stage 5D
+
+---
+
+### Stage 5D: FX Forecasting & Exposure Intelligence
+- **Start Timestamp:** 2026-11-05 00:37:00
+- **Completion Timestamp:** 2026-11-05 00:43:00
+- **Status:** **COMPLETED & VERIFIED**
+- **Actions & Implementation:**
+  - Designed and created models `FxForecast` and `FxScenarioRun` in `backend/app/models/`.
+  - Created Alembic migration `005_create_fx_forecast_and_scenario_tables.py`, verified upgrade and downgrade on scratch database, applied to `finora.db`.
+  - Created Indian financial markets trading calendar utility `backend/app/services/trading_calendar.py` with gazetted holiday awareness for forward session mapping.
+  - Implemented `FxForecastingService`:
+    - Point forecast generation using registered ML regressors and classifiers.
+    - Calibrated confidence intervals (80% and 95%) derived from validation RMSE.
+    - Multi-currency exposure aggregation joining open invoices (excluding PAID and CANCELLED, accounting for partial payments) and open expenses (excluding PAID).
+    - Unrealized exposure impact math with directional sign correctness (export receivables benefit from FX depreciation/rise; import payables suffer).
+    - Separation of supported currencies (USD, EUR, GBP) and unsupported currencies.
+  - Implemented FastAPI router `backend/app/routers/fx.py`:
+    - `GET /api/v1/fx/pairs`: List supported FX currency pairs and skill status.
+    - `GET /api/v1/fx/rates/current`: Latest indicative FX rates.
+    - `GET /api/v1/fx/rates/history`: Historical reference rate queries with pagination and date filters.
+    - `GET /api/v1/fx/models/status`: Readiness and skill status of models.
+    - `GET /api/v1/fx/models/metrics`: Horizon-level evaluation metrics.
+    - `POST /api/v1/fx/forecast`: Multi-horizon point forecasts with confidence bounds.
+    - `GET /api/v1/fx/forecasts/{id}` & `GET /api/v1/fx/forecasts/history`: Persisted forecast lookups.
+    - `GET /api/v1/fx/exposure`: Real-time exposure calculation against latest benchmark rates and 10-session forecasts.
+  - Mounted `/fx` router in `backend/app/main.py` under `/api/v1`.
+- **Tests Executed:**
+  - Stage 5D test suite (`backend/tests/test_fx_forecast_and_exposure.py`): 9 / 9 PASSED.
+  - Full project regression test suite: 103 / 103 PASSED (0 failures, 91.46s).
+- **Frontend Verification:**
+  - `src/` directory 100% untouched.
+  - `npm.cmd run build` succeeded cleanly in 5.00s (0 errors).
+- **Next Permitted Stage:** Stage 5E

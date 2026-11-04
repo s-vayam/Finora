@@ -7,6 +7,7 @@ from app.routers.transactions import router as transactions_router
 from app.routers.cashflow import router as cashflow_router
 from app.routers.payments import router as payments_router
 from app.routers.predictions import router as predictions_router
+from app.routers.fx import router as fx_router
 
 __all__ = [
     "health_router",
@@ -18,4 +19,5 @@ __all__ = [
     "cashflow_router",
     "payments_router",
     "predictions_router",
+    "fx_router",
 ]

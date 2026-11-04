@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import List, Optional
+from decimal import Decimal
+from typing import Any, List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
@@ -184,7 +185,10 @@ def create_collection_override(
     db: Session,
     payload: CollectionOverrideCreate,
 ) -> CollectionForecastOverride:
-    """Create a manual collection forecast override for an invoice."""
+    """
+    Create a manual customer commitment / collection forecast override for an invoice.
+    Supports partial commitments, probability weighting, and validates against outstanding balance.
+    """
     company = db.query(Company).filter(Company.company_id == payload.company_id).first()
     if not company:
         raise HTTPException(
@@ -199,8 +203,20 @@ def create_collection_override(
             detail=f"Invoice '{payload.invoice_id}' not found.",
         )
 
-    # Deactivate any previous active override for this invoice to preserve audit history
-    prior_overrides = (
+    # Calculate current invoice financials
+    total_amount = Decimal(str(invoice.invoice_amount))
+    payments = invoice.payments or []
+    amount_paid = sum((Decimal(str(p.amount)) for p in payments), Decimal("0.00"))
+    outstanding = max(Decimal("0.00"), total_amount - amount_paid)
+
+    if str(invoice.status).upper() in ("PAID", "CANCELLED") or outstanding <= Decimal("0.00"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Cannot add collection commitment for invoice '{invoice.invoice_id}' with status '{invoice.status}' and zero outstanding balance.",
+        )
+
+    # Check existing active commitments for this invoice
+    active_commitments = (
         db.query(CollectionForecastOverride)
         .filter(
             CollectionForecastOverride.invoice_id == payload.invoice_id,
@@ -208,8 +224,62 @@ def create_collection_override(
         )
         .all()
     )
-    for prior in prior_overrides:
-        prior.is_active = False
+
+    current_committed = sum(
+        (Decimal(str(c.expected_amount)) if c.expected_amount is not None else outstanding for c in active_commitments),
+        Decimal("0.00"),
+    )
+
+    # Determine expected amount (default to remaining uncommitted balance)
+    if payload.expected_amount is not None:
+        amt = Decimal(str(payload.expected_amount)).quantize(Decimal("0.01"))
+        if amt <= Decimal("0.00"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Expected collection amount must be greater than zero.",
+            )
+    else:
+        amt = max(Decimal("0.00"), outstanding - current_committed).quantize(Decimal("0.01"))
+        if amt <= Decimal("0.00"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invoice '{invoice.invoice_id}' already has active commitments covering the full outstanding balance of {outstanding}.",
+            )
+
+    # Validate amount against remaining outstanding balance
+    if current_committed + amt > outstanding:
+        remaining_allocatable = max(Decimal("0.00"), outstanding - current_committed)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Total active commitment amount ({current_committed + amt}) exceeds "
+                f"remaining invoice outstanding balance ({outstanding}). "
+                f"Maximum available for commitment: {remaining_allocatable} {invoice.currency}."
+            ),
+        )
+
+    # Prevent duplicate active commitments on the exact same date and amount
+    for existing in active_commitments:
+        if existing.expected_collection_date == payload.expected_collection_date:
+            ex_amt = Decimal(str(existing.expected_amount)) if existing.expected_amount is not None else outstanding
+            if abs(ex_amt - amt) < Decimal("0.01"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"An active commitment for invoice '{payload.invoice_id}' with date '{payload.expected_collection_date}' and amount {amt} already exists.",
+                )
+
+    # Normalize probability (accepts 0.0 - 1.0 or 1 - 100)
+    raw_prob = Decimal(str(payload.recovery_probability)) if payload.recovery_probability is not None else Decimal("1.00")
+    if raw_prob > Decimal("1.00") and raw_prob <= Decimal("100.00"):
+        prob = (raw_prob / Decimal("100.00")).quantize(Decimal("0.0001"))
+    else:
+        prob = raw_prob.quantize(Decimal("0.0001"))
+
+    if prob <= Decimal("0.00") or prob > Decimal("1.00"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Recovery probability must be between 0.01 and 1.00 (or 1% to 100%).",
+        )
 
     override_id = f"OVR-{uuid.uuid4().hex[:12].upper()}"
     override = CollectionForecastOverride(
@@ -217,10 +287,89 @@ def create_collection_override(
         company_id=payload.company_id,
         invoice_id=payload.invoice_id,
         expected_collection_date=payload.expected_collection_date,
+        expected_amount=amt,
+        recovery_probability=prob,
+        commitment_source=payload.commitment_source or "CUSTOMER_COMMITMENT",
         notes=payload.notes,
         is_active=payload.is_active,
     )
     db.add(override)
+    db.commit()
+    db.refresh(override)
+    return override
+
+
+def update_collection_override(
+    db: Session,
+    override_id: str,
+    payload: Any,
+) -> CollectionForecastOverride:
+    """Update an existing collection commitment / forecast override."""
+    override = (
+        db.query(CollectionForecastOverride)
+        .filter(CollectionForecastOverride.override_id == override_id)
+        .first()
+    )
+    if not override:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Collection override '{override_id}' not found.",
+        )
+
+    invoice = db.query(Invoice).filter(Invoice.invoice_id == override.invoice_id).first()
+    if invoice and payload.expected_amount is not None:
+        total_amount = Decimal(str(invoice.invoice_amount))
+        payments = invoice.payments or []
+        amount_paid = sum((Decimal(str(p.amount)) for p in payments), Decimal("0.00"))
+        outstanding = max(Decimal("0.00"), total_amount - amount_paid)
+
+        # Other active commitments excluding this one
+        other_commitments = (
+            db.query(CollectionForecastOverride)
+            .filter(
+                CollectionForecastOverride.invoice_id == override.invoice_id,
+                CollectionForecastOverride.override_id != override_id,
+                CollectionForecastOverride.is_active == True,
+            )
+            .all()
+        )
+        other_total = sum(
+            (Decimal(str(c.expected_amount)) if c.expected_amount is not None else outstanding for c in other_commitments),
+            Decimal("0.00"),
+        )
+        new_amt = Decimal(str(payload.expected_amount)).quantize(Decimal("0.01"))
+        if other_total + new_amt > outstanding:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Updated commitment amount ({new_amt}) causes total active commitments ({other_total + new_amt}) to exceed outstanding balance ({outstanding}).",
+            )
+        override.expected_amount = new_amt
+
+    if payload.expected_collection_date is not None:
+        override.expected_collection_date = payload.expected_collection_date
+
+    if payload.recovery_probability is not None:
+        raw_prob = Decimal(str(payload.recovery_probability))
+        if raw_prob > Decimal("1.00") and raw_prob <= Decimal("100.00"):
+            prob = (raw_prob / Decimal("100.00")).quantize(Decimal("0.0001"))
+        else:
+            prob = raw_prob.quantize(Decimal("0.0001"))
+        if prob <= Decimal("0.00") or prob > Decimal("1.00"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Recovery probability must be between 0.01 and 1.00.",
+            )
+        override.recovery_probability = prob
+
+    if payload.commitment_source is not None:
+        override.commitment_source = payload.commitment_source
+
+    if payload.notes is not None:
+        override.notes = payload.notes
+
+    if payload.is_active is not None:
+        override.is_active = payload.is_active
+
     db.commit()
     db.refresh(override)
     return override
@@ -241,7 +390,13 @@ def list_collection_overrides(
     if is_active is not None:
         query = query.filter(CollectionForecastOverride.is_active == is_active)
 
-    return query.order_by(CollectionForecastOverride.created_at.desc()).all()
+    overrides = query.order_by(CollectionForecastOverride.created_at.desc()).all()
+    # Populate expected_inflow_amount helper attribute
+    for ovr in overrides:
+        amt = Decimal(str(ovr.expected_amount)) if ovr.expected_amount is not None else Decimal("0.00")
+        prob = Decimal(str(ovr.recovery_probability)) if ovr.recovery_probability is not None else Decimal("1.00")
+        ovr.expected_inflow_amount = (amt * prob).quantize(Decimal("0.01"))
+    return overrides
 
 
 def deactivate_collection_override(

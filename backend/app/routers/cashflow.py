@@ -22,6 +22,7 @@ from app.schemas.cashflow_forecast import (
     CashBalanceSnapshotUpdate,
     CashBalanceSnapshotResponse,
     CollectionOverrideCreate,
+    CollectionOverrideUpdate,
     CollectionOverrideResponse,
     ExpenseAssumptionCreate,
     ExpenseAssumptionUpdate,
@@ -37,6 +38,7 @@ from app.services.cashflow_data_service import (
     update_cash_position,
     get_latest_cash_position,
     create_collection_override,
+    update_collection_override,
     list_collection_overrides,
     deactivate_collection_override,
     create_expense_assumption,
@@ -153,6 +155,20 @@ def list_invoice_collection_overrides(
 ):
     """Retrieve collection overrides for the company."""
     return list_collection_overrides(db, company_id=company_id, invoice_id=invoice_id, is_active=is_active)
+
+
+@router.patch(
+    "/collection-overrides/{override_id}",
+    response_model=CollectionOverrideResponse,
+    summary="Update collection forecast override",
+)
+def update_invoice_collection_override(
+    override_id: str,
+    payload: CollectionOverrideUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update active collection override parameters."""
+    return update_collection_override(db, override_id, payload)
 
 
 @router.delete(

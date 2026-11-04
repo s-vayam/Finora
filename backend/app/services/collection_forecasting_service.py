@@ -75,16 +75,17 @@ def forecast_invoice_collections(
         .all()
     )
 
-    # Fetch all active overrides for the company
-    active_overrides = {
-        ovr.invoice_id: ovr
-        for ovr in db.query(CollectionForecastOverride)
+    # Fetch all active overrides/commitments for the company, grouped by invoice_id
+    active_overrides_by_invoice: Dict[str, List[CollectionForecastOverride]] = {}
+    for ovr in (
+        db.query(CollectionForecastOverride)
         .filter(
             CollectionForecastOverride.company_id == company_id,
             CollectionForecastOverride.is_active == True,
         )
         .all()
-    }
+    ):
+        active_overrides_by_invoice.setdefault(ovr.invoice_id, []).append(ovr)
 
     scheduled_events: List[Dict[str, Any]] = []
     invoice_details: List[Dict[str, Any]] = []
@@ -120,49 +121,77 @@ def forecast_invoice_collections(
             })
             continue
 
-        # Check Active Manual Override First
-        if inv.invoice_id in active_overrides:
-            override = active_overrides[inv.invoice_id]
-            coll_date = override.expected_collection_date
+        # Check Active Customer Commitments / Manual Overrides First
+        if inv.invoice_id in active_overrides_by_invoice:
+            commitments_list = active_overrides_by_invoice[inv.invoice_id]
+            inv_events = []
+            total_committed_amt = Decimal("0.00")
 
-            if coll_date < as_of_date:
-                # Override date has already passed -> OVERDUE_UNRESOLVED
+            for override in commitments_list:
+                coll_date = override.expected_collection_date
+                # Amount committed (or full outstanding if not specified)
+                ovr_amt = Decimal(str(override.expected_amount)) if getattr(override, 'expected_amount', None) is not None else outstanding
+                prob = Decimal(str(override.recovery_probability)) if getattr(override, 'recovery_probability', None) is not None else Decimal("1.00")
+                weighted_inflow = (ovr_amt * prob).quantize(Decimal("0.01"))
+                total_committed_amt += ovr_amt
+
+                # Classify as Overdue Recovery if original due date < as_of_date, else Customer Commitment
+                coll_type = "OVERDUE_RECOVERY" if inv.due_date < as_of_date else "MANUAL_COMMITMENT"
+
+                if coll_date < as_of_date:
+                    # Commitment date has already passed
+                    unresolved_overdue.append({
+                        "invoice_id": inv.invoice_id,
+                        "customer_id": inv.customer_id,
+                        "outstanding_amount": ovr_amt,
+                        "due_date": inv.due_date,
+                        "expected_collection_date": coll_date,
+                        "status": "OVERDUE_UNRESOLVED",
+                        "reason": f"Active customer commitment collection date ({coll_date}) is in the past.",
+                    })
+                    total_overdue_unresolved += ovr_amt
+                else:
+                    event = {
+                        "date": coll_date,
+                        "amount": weighted_inflow,
+                        "nominal_amount": ovr_amt,
+                        "invoice_id": inv.invoice_id,
+                        "customer_id": inv.customer_id,
+                        "collection_type": coll_type,
+                        "probability": prob,
+                        "commitment_source": getattr(override, "commitment_source", "CUSTOMER_COMMITMENT"),
+                        "override_id": override.override_id,
+                    }
+                    inv_events.append(event)
+                    if as_of_date <= coll_date <= horizon_end_date:
+                        scheduled_events.append(event)
+                        total_forecastable_inflows += weighted_inflow
+                    else:
+                        outside_horizon_events.append(event)
+
+            # Check uncommitted remaining balance on overdue invoices
+            uncommitted = max(Decimal("0.00"), outstanding - total_committed_amt)
+            if uncommitted > Decimal("0.00") and inv.due_date < as_of_date:
                 unresolved_overdue.append({
                     "invoice_id": inv.invoice_id,
                     "customer_id": inv.customer_id,
-                    "outstanding_amount": outstanding,
+                    "outstanding_amount": uncommitted,
                     "due_date": inv.due_date,
-                    "expected_collection_date": coll_date,
                     "status": "OVERDUE_UNRESOLVED",
-                    "reason": "Active manual override collection date is in the past.",
+                    "reason": f"Uncommitted remaining overdue balance of {uncommitted} {inv.currency}.",
                 })
-                total_overdue_unresolved += outstanding
-            else:
-                # Active override is current or future
-                event = {
-                    "date": coll_date,
-                    "amount": outstanding,
-                    "invoice_id": inv.invoice_id,
-                    "customer_id": inv.customer_id,
-                    "collection_type": "MANUAL_OVERRIDE",
-                    "probability": Decimal("1.00"),
-                }
-                if as_of_date <= coll_date <= horizon_end_date:
-                    scheduled_events.append(event)
-                    total_forecastable_inflows += outstanding
-                else:
-                    outside_horizon_events.append(event)
+                total_overdue_unresolved += uncommitted
 
-                invoice_details.append({
-                    "invoice_id": inv.invoice_id,
-                    "customer_id": inv.customer_id,
-                    "total_amount": fin["total_amount"],
-                    "outstanding_amount": outstanding,
-                    "due_date": inv.due_date,
-                    "status": "OVERRIDDEN",
-                    "source": "MANUAL_OVERRIDE",
-                    "events": [event],
-                })
+            invoice_details.append({
+                "invoice_id": inv.invoice_id,
+                "customer_id": inv.customer_id,
+                "total_amount": fin["total_amount"],
+                "outstanding_amount": outstanding,
+                "due_date": inv.due_date,
+                "status": "COMMITMENT_SCHEDULED",
+                "source": "CUSTOMER_COMMITMENT",
+                "events": inv_events,
+            })
             continue
 
         # Partially Paid Invoices -> RULE_BASED fallback
@@ -321,7 +350,17 @@ def forecast_invoice_collections(
     # Sort scheduled events chronologically
     scheduled_events.sort(key=lambda x: x["date"])
 
-    # Aggregates by horizon
+    # Aggregates by horizon and collection category
+    scheduled_collections = sum(
+        (ev["amount"] for ev in scheduled_events if ev.get("collection_type") in ("ML_ON_TIME", "ML_LATE", "RULE_BASED")),
+        Decimal("0.00"),
+    )
+    overdue_recovery_forecast = sum(
+        (ev["amount"] for ev in scheduled_events if ev.get("collection_type") in ("OVERDUE_RECOVERY", "MANUAL_COMMITMENT", "MANUAL_OVERRIDE")),
+        Decimal("0.00"),
+    )
+    total_expected_inflows = scheduled_collections + overdue_recovery_forecast
+
     inflows_30d = sum(
         (ev["amount"] for ev in scheduled_events if ev["date"] <= as_of_date + timedelta(days=30)),
         Decimal("0.00"),
@@ -345,6 +384,9 @@ def forecast_invoice_collections(
             "total_outstanding_receivables": total_outstanding_receivables,
             "total_forecastable_inflows": total_forecastable_inflows,
             "total_overdue_unresolved": total_overdue_unresolved,
+            "scheduled_collections": scheduled_collections,
+            "overdue_recovery_forecast": overdue_recovery_forecast,
+            "total_expected_inflows": total_expected_inflows,
             "inflows_30d": inflows_30d,
             "inflows_60d": inflows_60d,
             "inflows_90d": inflows_90d,

@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from sqlalchemy import Column, String, Date, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import Column, String, Date, Boolean, DateTime, ForeignKey, Numeric, func
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -11,6 +11,9 @@ class CollectionForecastOverride(Base):
     company_id = Column(String(50), ForeignKey("companies.company_id", ondelete="CASCADE"), nullable=False, index=True)
     invoice_id = Column(String(50), ForeignKey("invoices.invoice_id", ondelete="CASCADE"), nullable=False, index=True)
     expected_collection_date = Column(Date, nullable=False)
+    expected_amount = Column(Numeric(15, 2), nullable=True)
+    recovery_probability = Column(Numeric(5, 4), nullable=False, default=1.0)
+    commitment_source = Column(String(100), nullable=False, default="CUSTOMER_COMMITMENT")
     notes = Column(String(500), nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, nullable=False, server_default=func.now())

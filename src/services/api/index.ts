@@ -263,10 +263,27 @@ export const cashflowApi = {
       signal,
     }),
 
-  createCollectionOverride: (data: { invoice_id: string; expected_collection_date: string; notes?: string }, signal?: AbortSignal) =>
+  getInvoiceOverrides: (invoiceId: string, signal?: AbortSignal) =>
+    apiClient.get<CollectionOverrideBackend[]>(API_ENDPOINTS.cashflowOverrides, {
+      params: { company_id: DEFAULT_COMPANY_ID, invoice_id: invoiceId, is_active: true },
+      signal,
+    }),
+
+  createCollectionOverride: (
+    data: {
+      invoice_id: string;
+      expected_collection_date: string;
+      expected_amount?: number;
+      recovery_probability?: number;
+      commitment_source?: string;
+      notes?: string;
+      company_id?: string;
+    },
+    signal?: AbortSignal
+  ) =>
     apiClient.post<CollectionOverrideBackend>(
       API_ENDPOINTS.cashflowOverrides,
-      { company_id: DEFAULT_COMPANY_ID, ...data },
+      { company_id: data.company_id || DEFAULT_COMPANY_ID, ...data },
       { signal }
     ),
 

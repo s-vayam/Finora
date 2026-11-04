@@ -68,8 +68,20 @@ class CollectionOverrideCreate(BaseModel):
     company_id: str = Field(..., description="Company ID")
     invoice_id: str = Field(..., description="Target invoice ID")
     expected_collection_date: date = Field(..., description="Manual expected collection date")
+    expected_amount: Optional[Decimal] = Field(None, gt=0, description="Expected collection amount")
+    recovery_probability: Optional[Decimal] = Field(Decimal("1.00"), ge=0, le=1, description="Recovery probability 0.0 to 1.0")
+    commitment_source: Optional[str] = Field("CUSTOMER_COMMITMENT", max_length=100, description="Commitment source")
     notes: Optional[str] = Field(None, max_length=500, description="Reason for override")
     is_active: bool = Field(True, description="Whether this override is active")
+
+
+class CollectionOverrideUpdate(BaseModel):
+    expected_collection_date: Optional[date] = Field(None, description="Updated collection date")
+    expected_amount: Optional[Decimal] = Field(None, gt=0, description="Updated expected collection amount")
+    recovery_probability: Optional[Decimal] = Field(None, ge=0, le=1, description="Updated recovery probability")
+    commitment_source: Optional[str] = Field(None, max_length=100, description="Updated commitment source")
+    notes: Optional[str] = Field(None, max_length=500, description="Updated notes")
+    is_active: Optional[bool] = Field(None, description="Active status")
 
 
 class CollectionOverrideResponse(BaseModel):
@@ -77,6 +89,10 @@ class CollectionOverrideResponse(BaseModel):
     company_id: str
     invoice_id: str
     expected_collection_date: date
+    expected_amount: Optional[Decimal] = None
+    recovery_probability: Optional[Decimal] = Decimal("1.00")
+    commitment_source: Optional[str] = "CUSTOMER_COMMITMENT"
+    expected_inflow_amount: Optional[Decimal] = None
     notes: Optional[str] = None
     is_active: bool
     created_at: datetime
@@ -172,6 +188,14 @@ class ForecastSummary(BaseModel):
     expected_outflows: Decimal
     net_cash_flow: Decimal
     closing_balance: Decimal
+    # Collection breakdown and actual financial activity
+    actual_inflows: Decimal = Decimal("0.00")
+    actual_outflows: Decimal = Decimal("0.00")
+    scheduled_collections: Decimal = Decimal("0.00")
+    overdue_recovery_forecast: Decimal = Decimal("0.00")
+    total_expected_inflows: Decimal = Decimal("0.00")
+    projected_outflows: Decimal = Decimal("0.00")
+    projected_closing_balance: Decimal = Decimal("0.00")
     minimum_projected_balance: Decimal
     minimum_balance_date: Optional[date] = None
     days_below_threshold: int = 0
@@ -207,6 +231,14 @@ class CashflowForecastResponse(BaseModel):
     net_cash_flow: Optional[Decimal] = None
     closing_balance: Optional[Decimal] = None
     daily_projections: Optional[List[DailyCashflowProjection]] = None
+    # Collection breakdown top-level aliases
+    actual_inflows: Optional[Decimal] = None
+    actual_outflows: Optional[Decimal] = None
+    scheduled_collections: Optional[Decimal] = None
+    overdue_recovery_forecast: Optional[Decimal] = None
+    total_expected_inflows: Optional[Decimal] = None
+    projected_outflows: Optional[Decimal] = None
+    projected_closing_balance: Optional[Decimal] = None
 
     model_config = ConfigDict(from_attributes=True)
 

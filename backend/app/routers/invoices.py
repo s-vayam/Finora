@@ -499,9 +499,49 @@ def record_payment(
 
         # Update invoice state if fully settled
         new_paid = fin["amount_paid"] + payload.amount
+        new_outstanding = max(Decimal("0.00"), invoice.invoice_amount - new_paid)
         if abs(invoice.invoice_amount - new_paid) < Decimal("0.005"):
             invoice.status = "PAID"
             invoice.actual_payment_date = payload.payment_date
+
+            # Deactivate future collection commitments for fully settled invoice
+            from app.models.collection_forecast_override import CollectionForecastOverride
+            active_commitments = (
+                db.query(CollectionForecastOverride)
+                .filter(
+                    CollectionForecastOverride.invoice_id == invoice.invoice_id,
+                    CollectionForecastOverride.is_active == True,
+                )
+                .all()
+            )
+            for c in active_commitments:
+                c.is_active = False
+                c.notes = (c.notes or "") + " [Auto-reconciled: invoice fully settled]"
+        else:
+            # Partially paid: reconcile active commitments so total does not exceed remaining outstanding
+            from app.models.collection_forecast_override import CollectionForecastOverride
+            active_commitments = (
+                db.query(CollectionForecastOverride)
+                .filter(
+                    CollectionForecastOverride.invoice_id == invoice.invoice_id,
+                    CollectionForecastOverride.is_active == True,
+                )
+                .order_by(CollectionForecastOverride.expected_collection_date.asc())
+                .all()
+            )
+            committed_total = Decimal("0.00")
+            for c in active_commitments:
+                c_amt = Decimal(str(c.expected_amount)) if getattr(c, 'expected_amount', None) is not None else new_outstanding
+                if committed_total + c_amt > new_outstanding:
+                    excess = (committed_total + c_amt) - new_outstanding
+                    if c_amt > excess:
+                        c.expected_amount = c_amt - excess
+                        committed_total += c.expected_amount
+                    else:
+                        c.is_active = False
+                        c.notes = (c.notes or "") + " [Auto-reconciled: excess over remaining balance]"
+                else:
+                    committed_total += c_amt
 
         db.commit()
         db.refresh(payment)

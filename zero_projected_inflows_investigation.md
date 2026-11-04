@@ -173,3 +173,4 @@ When managing overdue export invoices in Finora, finance managers should follow 
 | **Is ₹0.0 L projected inflows a bug?** | **No.** It is the mathematically and financially correct calculation. |
 | **Are eligible invoices excluded?** | **No.** Every invoice is evaluated; all 26 unpaid invoices are >250 days overdue. |
 | **Can overdue receivables be converted to inflows?** | **Yes**, via `POST /api/v1/cashflow/collection-overrides` when a valid promise date exists. |
+

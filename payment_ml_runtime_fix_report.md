@@ -247,3 +247,4 @@ To test in the live browser (`http://localhost:3000`):
    - Estimated payment date displays: **Dec 31, 2025**.
    - Click the **Re-analyze Risk** or **Analyze Risk** button.
    - A live prediction is recalculated in under 50ms and persisted to the prediction history table.
+

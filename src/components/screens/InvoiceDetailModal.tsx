@@ -14,15 +14,19 @@ import {
   TrendingDown,
   Clock,
   CreditCard,
-  Loader2
+  Loader2,
+  CalendarPlus,
+  Trash2,
+  ShieldCheck,
+  Plus
 } from 'lucide-react';
 import { Invoice } from '../../types';
 import { StatusBadge } from '../common/Badge';
 import { EXCHANGE_RATES } from '../../data/mockData';
 import { useModalFocus } from '../../hooks/useModalFocus';
 import { AccessibleTooltip } from '../common/AccessibleTooltip';
-import { paymentsApi, predictionApi } from '../../services/api';
-import { PaymentBackend, PaymentRiskPrediction } from '../../services/api/types';
+import { paymentsApi, predictionApi, cashflowApi } from '../../services/api';
+import { PaymentBackend, PaymentRiskPrediction, CollectionOverrideBackend } from '../../services/api/types';
 
 interface InvoiceDetailModalProps {
   invoice: Invoice | null;
@@ -55,13 +59,51 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
 
+  // State for Customer Collection Commitments
+  const [commitments, setCommitments] = useState<CollectionOverrideBackend[]>([]);
+  const [commitmentsLoading, setCommitmentsLoading] = useState(false);
+  const [showAddCommitment, setShowAddCommitment] = useState(false);
+  const [commitAmount, setCommitAmount] = useState('');
+  const [commitDate, setCommitDate] = useState('');
+  const [commitProbability, setCommitProbability] = useState('90');
+  const [commitSource, setCommitSource] = useState('Customer confirmed by phone');
+  const [commitNotes, setCommitNotes] = useState('');
+  const [commitSubmitting, setCommitSubmitting] = useState(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
+
+  const fetchCommitments = (invoiceId: string) => {
+    setCommitmentsLoading(true);
+    cashflowApi.getInvoiceOverrides(invoiceId)
+      .then((res) => {
+        setCommitments(res || []);
+      })
+      .catch(() => {
+        setCommitments([]);
+      })
+      .finally(() => {
+        setCommitmentsLoading(false);
+      });
+  };
+
   useEffect(() => {
     if (!invoice) {
       setPayments([]);
       setPrediction(null);
       setPredictionError(null);
+      setCommitments([]);
+      setShowAddCommitment(false);
       return;
     }
+
+    // Default commitment values
+    const currentOutstanding = invoice.outstandingBalance !== undefined ? invoice.outstandingBalance : invoice.amount;
+    setCommitAmount(String(currentOutstanding));
+    const nextTwoWeeks = new Date();
+    nextTwoWeeks.setDate(nextTwoWeeks.getDate() + 14);
+    setCommitDate(nextTwoWeeks.toISOString().split('T')[0]);
+
+    // Fetch commitments
+    fetchCommitments(invoice.id);
 
     // Fetch payments history
     let isSubscribed = true;
@@ -125,6 +167,42 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
     }
   };
 
+  const handleAddCommitment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!invoice) return;
+    setCommitSubmitting(true);
+    setCommitError(null);
+    try {
+      const parsedAmt = parseFloat(commitAmount);
+      const parsedProb = parseFloat(commitProbability) / 100;
+      await cashflowApi.createCollectionOverride({
+        invoice_id: invoice.id,
+        expected_collection_date: commitDate,
+        expected_amount: parsedAmt,
+        recovery_probability: parsedProb,
+        commitment_source: commitSource,
+        notes: commitNotes.trim() ? commitNotes.trim() : undefined,
+      });
+      setShowAddCommitment(false);
+      setCommitNotes('');
+      fetchCommitments(invoice.id);
+    } catch (err: any) {
+      setCommitError(err?.message || 'Could not record collection commitment.');
+    } finally {
+      setCommitSubmitting(false);
+    }
+  };
+
+  const handleDeleteCommitment = async (overrideId: string) => {
+    if (!invoice) return;
+    try {
+      await cashflowApi.deleteCollectionOverride(overrideId);
+      fetchCommitments(invoice.id);
+    } catch (err: any) {
+      setCommitError(err?.message || 'Could not deactivate commitment.');
+    }
+  };
+
   if (!invoice) return null;
 
   const rate = EXCHANGE_RATES[invoice.currency] || 85;
@@ -144,6 +222,7 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
 
   const isPaid = invoice.status === 'Paid' || invoice.backendStatus === 'PAID';
   const isPartiallyPaid = invoice.backendStatus === 'PARTIALLY_PAID';
+  const isCancelled = invoice.backendStatus === 'CANCELLED';
 
   return (
     <div
@@ -362,6 +441,196 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
               <p className="text-xs text-[#B94A48] mt-2">{predictionError}</p>
             )}
           </div>
+
+          {/* Overdue Recovery & Customer Commitments Section */}
+          {!isPaid && !isCancelled && (
+            <div className="p-4 rounded-xl border border-[#E7E7E2] bg-white text-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-[#E7E7E2] pb-2">
+                <div className="flex items-center gap-2">
+                  <CalendarPlus className="w-4 h-4 text-[#244E3D]" />
+                  <div>
+                    <h3 className="font-bold text-[11px] text-[#111111] uppercase tracking-wider">
+                      Overdue Recovery & Customer Commitments ({commitments.length})
+                    </h3>
+                    <p className="text-[10px] text-[#8B8D86]">
+                      Finance manager-confirmed future collections with probability weighting
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCommitment(!showAddCommitment)}
+                  className="px-2.5 py-1 bg-[#244E3D] hover:bg-[#1C3E30] text-white text-[11px] font-semibold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>{showAddCommitment ? 'Cancel' : 'Add Collection Forecast'}</span>
+                </button>
+              </div>
+
+              {/* Add Commitment Form */}
+              {showAddCommitment && (
+                <form onSubmit={handleAddCommitment} className="p-3 bg-[#F5F5F2] rounded-xl border border-[#E7E7E2] space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-700 block mb-0.5">
+                        Expected Collection Amount ({invoice.currency})
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={outstanding}
+                        value={commitAmount}
+                        onChange={(e) => setCommitAmount(e.target.value)}
+                        className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs font-mono"
+                        required
+                      />
+                      <span className="text-[9px] text-[#8B8D86]">Remaining uncommitted: {getCurrencySymbol(invoice.currency)}{outstanding.toLocaleString()}</span>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-700 block mb-0.5">
+                        Expected Payment Date
+                      </label>
+                      <input
+                        type="date"
+                        value={commitDate}
+                        onChange={(e) => setCommitDate(e.target.value)}
+                        className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-700 block mb-0.5">
+                        Recovery Probability: {commitProbability}%
+                      </label>
+                      <input
+                        type="range"
+                        min="10"
+                        max="100"
+                        step="5"
+                        value={commitProbability}
+                        onChange={(e) => setCommitProbability(e.target.value)}
+                        className="w-full accent-[#244E3D] cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-neutral-700 block mb-0.5">
+                        Commitment Source
+                      </label>
+                      <select
+                        value={commitSource}
+                        onChange={(e) => setCommitSource(e.target.value)}
+                        className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs"
+                      >
+                        <option value="Customer confirmed by phone">Customer confirmed by phone</option>
+                        <option value="Customer email confirmation">Customer email confirmation</option>
+                        <option value="Promise to Pay (PTP) agreement">Promise to Pay (PTP) agreement</option>
+                        <option value="Trade finance LC amendment">Trade finance LC amendment</option>
+                        <option value="Written repayment schedule">Written repayment schedule</option>
+                      </select>
+                    </div>
+
+                    <div className="col-span-full">
+                      <label className="text-[10px] font-bold text-neutral-700 block mb-0.5">
+                        Optional Notes
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Spoke with customer finance; wire transfer scheduled upon customs clearance"
+                        value={commitNotes}
+                        onChange={(e) => setCommitNotes(e.target.value)}
+                        className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs"
+                        maxLength={500}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Real-time Calculation Preview */}
+                  {(() => {
+                    const amt = parseFloat(commitAmount) || 0;
+                    const prob = (parseFloat(commitProbability) || 0) / 100;
+                    const expectedInflow = amt * prob;
+                    return (
+                      <div className="p-2.5 rounded-lg bg-white border border-[#D9F83F] flex items-center justify-between">
+                        <div className="text-[11px] text-[#111111]">
+                          <span className="font-semibold">Expected Cash Inflow: </span>
+                          <span className="font-mono">{getCurrencySymbol(invoice.currency)}{amt.toLocaleString()} × {Math.round(prob * 100)}%</span>
+                        </div>
+                        <span className="font-bold text-xs text-[#244E3D]">
+                          = {getCurrencySymbol(invoice.currency)}{expectedInflow.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  {commitError && (
+                    <p className="text-xs text-[#B94A48]">{commitError}</p>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCommitment(false)}
+                      className="px-3 py-1.5 bg-neutral-200 hover:bg-neutral-300 text-neutral-700 font-semibold text-xs rounded-lg cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={commitSubmitting}
+                      className="px-4 py-1.5 bg-[#244E3D] hover:bg-[#1C3E30] text-white font-bold text-xs rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
+                    >
+                      {commitSubmitting ? 'Recording...' : 'Confirm Commitment'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Active Commitments List */}
+              {commitments.length === 0 ? (
+                <p className="text-[#8B8D86] text-xs italic">
+                  No active collection commitments recorded for this invoice. Click &quot;Add Collection Forecast&quot; to schedule expected recovery.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {commitments.map((c) => {
+                    const cAmt = Number(c.expected_amount || outstanding);
+                    const cProb = Number(c.recovery_probability || 1.0);
+                    const cInflow = Number(c.expected_inflow_amount || (cAmt * cProb));
+                    return (
+                      <div key={c.override_id} className="p-2.5 rounded-lg bg-[#F5F5F2] border border-[#E7E7E2] flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-[#111111]">
+                              {getCurrencySymbol(invoice.currency)}{cAmt.toLocaleString()} @ {Math.round(cProb * 100)}%
+                            </span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-[#EBEBE6] rounded font-semibold text-neutral-700">
+                              {c.commitment_source || 'Customer Commitment'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-[#8B8D86] block">
+                            Expected: <strong className="text-neutral-800">{c.expected_collection_date}</strong> • Expected Inflow: <strong className="text-[#244E3D]">{getCurrencySymbol(invoice.currency)}{cInflow.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                          </span>
+                          {c.notes && <span className="text-[10px] text-[#8B8D86] italic block">&ldquo;{c.notes}&rdquo;</span>}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCommitment(c.override_id)}
+                          className="p-1.5 text-neutral-400 hover:text-[#B94A48] rounded hover:bg-white transition-colors cursor-pointer"
+                          title="Deactivate commitment"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Payment History Section */}
           <div className="p-4 rounded-xl border border-[#E7E7E2] bg-white">

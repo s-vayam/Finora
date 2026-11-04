@@ -279,35 +279,33 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
       return buckets;
     }
 
-    // Fallback to static props if backend position not initialized
+    // If backend position exists but forecast is still loading, return empty to prevent mock data flickering
+    if (positionChecked && position && !forecast) {
+      return [];
+    }
+
+    // Fallback to static props ONLY if backend position is not initialized (e.g. unconfigured demo mode)
     return fallbackData.slice(0, horizonDays === 30 ? 3 : 6);
-  }, [viewMode, historical, forecast, horizonDays, fallbackData]);
+  }, [viewMode, historical, forecast, horizonDays, fallbackData, positionChecked, position]);
 
-  // KPI Calculations (Safely handling both nested summary and top-level fields to prevent NaN)
-  const openingLakh = position
-    ? Number((Number(position.balance_amount) / 100000).toFixed(1))
-    : forecast?.summary?.opening_balance != null
-    ? Number((Number(forecast.summary.opening_balance) / 100000).toFixed(1))
-    : forecast?.opening_balance != null
-    ? Number((Number(forecast.opening_balance) / 100000).toFixed(1))
-    : 25.0;
+  // Authoritative KPI & Collection Breakdown Calculations (Strictly derived from forecast response)
+  const summary = forecast?.summary;
+  const openingNum = Number(summary?.opening_balance ?? forecast?.opening_balance ?? position?.balance_amount ?? 0);
+  const actualInflowsNum = Number(summary?.actual_inflows ?? forecast?.actual_inflows ?? 0);
+  const actualOutflowsNum = Number(summary?.actual_outflows ?? forecast?.actual_outflows ?? 0);
+  const scheduledCollectionsNum = Number(summary?.scheduled_collections ?? forecast?.scheduled_collections ?? 0);
+  const overdueRecoveryNum = Number(summary?.overdue_recovery_forecast ?? forecast?.overdue_recovery_forecast ?? 0);
+  const totalExpectedInflowsNum = Number(summary?.total_expected_inflows ?? forecast?.total_expected_inflows ?? summary?.expected_inflows ?? forecast?.total_inflow ?? 0);
+  const projectedOutflowsNum = Number(summary?.projected_outflows ?? forecast?.projected_outflows ?? summary?.expected_outflows ?? forecast?.total_outflow ?? 0);
+  const closingBalanceNum = Number(summary?.projected_closing_balance ?? forecast?.projected_closing_balance ?? summary?.closing_balance ?? forecast?.closing_balance ?? (openingNum + totalExpectedInflowsNum - projectedOutflowsNum));
 
-  const rawInflow = forecast?.summary?.expected_inflows ?? forecast?.total_inflow;
-  const totalInflowsLakh = rawInflow != null
-    ? Number((Number(rawInflow) / 100000).toFixed(1))
-    : chartData.reduce((acc, d) => acc + (d.inflows || 0), 0);
-
-  const rawOutflow = forecast?.summary?.expected_outflows ?? forecast?.total_outflow;
-  const totalOutflowsLakh = rawOutflow != null
-    ? Number((Number(rawOutflow) / 100000).toFixed(1))
-    : chartData.reduce((acc, d) => acc + (d.outflows || 0), 0);
-
-  const rawClosing = forecast?.summary?.closing_balance ?? forecast?.closing_balance;
-  const closingBalanceLakh = rawClosing != null
-    ? Number((Number(rawClosing) / 100000).toFixed(1))
-    : (chartData[chartData.length - 1]?.closingBalance || openingLakh);
-
-  const totalNetLakh = Number((totalInflowsLakh - totalOutflowsLakh).toFixed(1));
+  const openingLakh = Number((openingNum / 100000).toFixed(1));
+  const scheduledCollectionsLakh = Number((scheduledCollectionsNum / 100000).toFixed(1));
+  const overdueRecoveryLakh = Number((overdueRecoveryNum / 100000).toFixed(1));
+  const totalInflowsLakh = Number((totalExpectedInflowsNum / 100000).toFixed(1));
+  const totalOutflowsLakh = Number((projectedOutflowsNum / 100000).toFixed(1));
+  const closingBalanceLakh = Number((closingBalanceNum / 100000).toFixed(1));
+  const totalNetLakh = Number(((totalExpectedInflowsNum - projectedOutflowsNum) / 100000).toFixed(1));
 
   return (
     <div className="space-y-6">
@@ -672,91 +670,193 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Opening Balance */}
-        <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs relative">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">Opening Liquidity</span>
-            {position && (
-              <button
-                type="button"
-                onClick={handleOpenEditPosition}
-                className="text-[11px] font-semibold text-[#244E3D] hover:text-[#1C3E30] flex items-center gap-1 cursor-pointer bg-[#F5F5F2] hover:bg-[#EBEBE6] px-2 py-0.5 rounded transition-colors"
-                title="Edit verified cash position"
-              >
-                <Edit2 className="w-3 h-3" />
-                <span>Edit</span>
-              </button>
-            )}
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
-              ₹{openingLakh.toFixed(1)} L
-            </span>
-            <span className="text-xs text-[#8B8D86]">INR</span>
-          </div>
-          <span className="text-[11px] text-[#8B8D86] block mt-3 pt-2.5 border-t border-[#F5F5F2]">
-            {position ? `Snapshot as of ${position.as_of_date}` : 'Baseline bank & EEFC balances'}
-          </span>
+      {/* KPI Cards & Skeletons */}
+      {loading && !forecast && position ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-pulse">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs space-y-3">
+              <div className="h-3 bg-neutral-200 rounded w-1/2" />
+              <div className="h-7 bg-neutral-200 rounded w-3/4" />
+              <div className="h-2.5 bg-neutral-100 rounded w-full mt-2" />
+            </div>
+          ))}
         </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Opening Balance */}
+          <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs relative">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">Opening Liquidity</span>
+              {position && (
+                <button
+                  type="button"
+                  onClick={handleOpenEditPosition}
+                  className="text-[11px] font-semibold text-[#244E3D] hover:text-[#1C3E30] flex items-center gap-1 cursor-pointer bg-[#F5F5F2] hover:bg-[#EBEBE6] px-2 py-0.5 rounded transition-colors"
+                  title="Edit verified cash position"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  <span>Edit</span>
+                </button>
+              )}
+            </div>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
+                ₹{openingLakh.toFixed(1)} L
+              </span>
+              <span className="text-xs text-[#8B8D86]">INR</span>
+            </div>
+            <span className="text-[11px] text-[#8B8D86] block mt-3 pt-2.5 border-t border-[#F5F5F2]">
+              {position ? `Snapshot as of ${position.as_of_date}` : 'Baseline bank & EEFC balances'}
+            </span>
+          </div>
 
-        {/* Period Inflows */}
-        <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs">
-          <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">
-            {viewMode === 'historical' ? 'Historical Inflows' : 'Projected Inflows'}
-          </span>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
-              ₹{totalInflowsLakh.toFixed(1)} L
+          {/* Period Inflows */}
+          <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs">
+            <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">
+              {viewMode === 'historical' ? 'Historical Inflows' : 'Total Expected Inflows'}
             </span>
-            <span className="text-xs text-[#39765A] font-semibold flex items-center">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              Receipts
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
+                ₹{totalInflowsLakh.toFixed(1)} L
+              </span>
+              <span className="text-xs text-[#39765A] font-semibold flex items-center">
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                Receipts
+              </span>
+            </div>
+            <span className="text-[11px] text-[#8B8D86] block mt-3 pt-2.5 border-t border-[#F5F5F2] truncate" title={`Scheduled: ₹${scheduledCollectionsLakh}L • Overdue: ₹${overdueRecoveryLakh}L`}>
+              {viewMode === 'historical' ? 'Last 12 calendar months' : `Sched: ₹${scheduledCollectionsLakh}L • Overdue: ₹${overdueRecoveryLakh}L`}
             </span>
           </div>
-          <span className="text-[11px] text-[#8B8D86] block mt-3 pt-2.5 border-t border-[#F5F5F2]">
-            {viewMode === 'historical' ? 'Last 12 calendar months' : `Probability-weighted for ${horizonDays} days`}
-          </span>
-        </div>
 
-        {/* Period Outflows */}
-        <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs">
-          <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">
-            {viewMode === 'historical' ? 'Historical Outflows' : 'Projected Outflows'}
-          </span>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
-              ₹{totalOutflowsLakh.toFixed(1)} L
+          {/* Period Outflows */}
+          <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs">
+            <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">
+              {viewMode === 'historical' ? 'Historical Outflows' : 'Projected Outflows'}
             </span>
-            <span className="text-xs text-[#B94A48] font-semibold flex items-center">
-              <ArrowDownRight className="w-3.5 h-3.5" />
-              Payables
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
+                ₹{totalOutflowsLakh.toFixed(1)} L
+              </span>
+              <span className="text-xs text-[#B94A48] font-semibold flex items-center">
+                <ArrowDownRight className="w-3.5 h-3.5" />
+                Payables
+              </span>
+            </div>
+            <span className="text-[11px] text-[#8B8D86] block mt-3 pt-2.5 border-t border-[#F5F5F2]">
+              Raw materials & shipping expenses
             </span>
           </div>
-          <span className="text-[11px] text-[#8B8D86] block mt-3 pt-2.5 border-t border-[#F5F5F2]">
-            Raw materials & shipping expenses
-          </span>
-        </div>
 
-        {/* Closing Balance */}
-        <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs">
-          <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">
-            {viewMode === 'historical' ? 'Settled Position' : 'Closing Liquidity'}
-          </span>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
-              ₹{closingBalanceLakh.toFixed(1)} L
+          {/* Closing Balance */}
+          <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs">
+            <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">
+              {viewMode === 'historical' ? 'Settled Position' : 'Closing Liquidity'}
             </span>
-            <span className={`text-xs font-bold ${totalNetLakh >= 0 ? 'text-[#39765A]' : 'text-[#B94A48]'}`}>
-              {totalNetLakh >= 0 ? `+₹${totalNetLakh}L` : `-₹${Math.abs(totalNetLakh)}L`} Net
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
+                ₹{closingBalanceLakh.toFixed(1)} L
+              </span>
+              <span className={`text-xs font-bold ${totalNetLakh >= 0 ? 'text-[#39765A]' : 'text-[#B94A48]'}`}>
+                {totalNetLakh >= 0 ? `+₹${totalNetLakh}L` : `-₹${Math.abs(totalNetLakh)}L`} Net
+              </span>
+            </div>
+            <span className="text-[11px] text-[#8B8D86] block mt-3 pt-2.5 border-t border-[#F5F5F2]">
+              {viewMode === 'historical' ? 'Authoritative historical closing' : `Projected at day ${horizonDays}`}
             </span>
           </div>
-          <span className="text-[11px] text-[#8B8D86] block mt-3 pt-2.5 border-t border-[#F5F5F2]">
-            {viewMode === 'historical' ? 'Authoritative historical closing' : `Projected at day ${horizonDays}`}
-          </span>
         </div>
-      </div>
+      )}
+
+      {/* Activity & Forecast Breakdown Panel (Actual vs Projected Collections) */}
+      {viewMode === 'forecast' && forecast && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Actual Financial Activity */}
+          <div className="p-4 bg-white rounded-xl border border-[#E7E7E2] shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-[#E7E7E2] pb-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-[#39765A]" />
+                <h4 className="font-bold text-xs text-[#111111] uppercase tracking-wider">
+                  Actual Financial Activity (Ledger)
+                </h4>
+              </div>
+              <span className="text-[10px] text-[#8B8D86]">
+                Post-snapshot movements
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2.5 bg-[#F5F5F2] rounded-lg">
+                <span className="text-[10px] text-[#8B8D86] block">Opening Liquidity</span>
+                <span className="text-sm font-bold text-[#111111]">
+                  ₹{(openingNum / 100000).toFixed(2)} L
+                </span>
+              </div>
+              <div className="p-2.5 bg-[#F5F5F2] rounded-lg">
+                <span className="text-[10px] text-[#8B8D86] block">Actual Inflows</span>
+                <span className="text-sm font-bold text-[#39765A]">
+                  ₹{(actualInflowsNum / 100000).toFixed(2)} L
+                </span>
+              </div>
+              <div className="p-2.5 bg-[#F5F5F2] rounded-lg">
+                <span className="text-[10px] text-[#8B8D86] block">Actual Outflows</span>
+                <span className="text-sm font-bold text-[#B94A48]">
+                  ₹{(actualOutflowsNum / 100000).toFixed(2)} L
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-[#8B8D86] leading-relaxed">
+              * Reconciled ledger settlements effective on or after {position ? position.as_of_date : 'the opening position date'}. Pre-snapshot historical transactions are preserved in Opening Liquidity without double-counting.
+            </p>
+          </div>
+
+          {/* Projected Financial Activity */}
+          <div className="p-4 bg-white rounded-xl border border-[#E7E7E2] shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-[#E7E7E2] pb-2">
+              <div className="flex items-center gap-2">
+                <TrendingDown className="w-4 h-4 text-[#244E3D]" />
+                <h4 className="font-bold text-xs text-[#111111] uppercase tracking-wider">
+                  Projected Financial Activity ({horizonDays}-Day Horizon)
+                </h4>
+              </div>
+              <span className="text-[10px] text-[#8B8D86]">
+                Rolling cashflow engine
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2.5 bg-[#F5F5F2] rounded-lg">
+                <span className="text-[10px] text-[#8B8D86] block">Scheduled Collections</span>
+                <span className="text-sm font-bold text-[#111111]">
+                  ₹{(scheduledCollectionsNum / 100000).toFixed(2)} L
+                </span>
+                <span className="text-[9px] text-[#8B8D86] block truncate">
+                  {scheduledCollectionsNum === 0 ? '0 on-time eligible' : 'ML & rule-based'}
+                </span>
+              </div>
+              <div className="p-2.5 bg-[#F5F5F2] rounded-lg">
+                <span className="text-[10px] text-[#8B8D86] block">Overdue Recovery</span>
+                <span className="text-sm font-bold text-[#39765A]">
+                  ₹{(overdueRecoveryNum / 100000).toFixed(2)} L
+                </span>
+                <span className="text-[9px] text-[#8B8D86] block truncate">
+                  {overdueRecoveryNum === 0 ? 'No commitments' : 'Probability-weighted'}
+                </span>
+              </div>
+              <div className="p-2.5 bg-[#F5F5F2] rounded-lg border border-[#D9F83F]">
+                <span className="text-[10px] text-[#8B8D86] block">Total Expected Inflows</span>
+                <span className="text-sm font-bold text-[#244E3D]">
+                  ₹{(totalExpectedInflowsNum / 100000).toFixed(2)} L
+                </span>
+                <span className="text-[9px] text-[#8B8D86] block">
+                  Scheduled + Overdue
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-[#8B8D86] leading-relaxed">
+              * Formula: Projected Closing Balance (₹{(closingBalanceNum / 100000).toFixed(2)} L) = Opening (₹{(openingNum / 100000).toFixed(2)} L) + Expected Inflows (₹{(totalExpectedInflowsNum / 100000).toFixed(2)} L) - Outflows (₹{(projectedOutflowsNum / 100000).toFixed(2)} L).
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Liquidity Alerts Banner */}
       {alerts && alerts.length > 0 && (

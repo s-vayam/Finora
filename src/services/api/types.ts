@@ -183,6 +183,13 @@ export interface ForecastSummaryBackend {
   expected_outflows: string | number;
   net_cash_flow: string | number;
   closing_balance: string | number;
+  actual_inflows?: string | number;
+  actual_outflows?: string | number;
+  scheduled_collections?: string | number;
+  overdue_recovery_forecast?: string | number;
+  total_expected_inflows?: string | number;
+  projected_outflows?: string | number;
+  projected_closing_balance?: string | number;
   minimum_projected_balance: string | number;
   minimum_balance_date?: string;
   days_below_threshold?: number;
@@ -216,6 +223,13 @@ export interface CashflowForecastResponse {
   total_outflow?: number;
   net_cash_flow?: number;
   closing_balance?: number;
+  actual_inflows?: number | string;
+  actual_outflows?: number | string;
+  scheduled_collections?: number | string;
+  overdue_recovery_forecast?: number | string;
+  total_expected_inflows?: number | string;
+  projected_outflows?: number | string;
+  projected_closing_balance?: number | string;
   summary?: ForecastSummaryBackend;
   daily_projection?: DailyProjectionItem[];
   daily_projections?: DailyProjectionItem[];
@@ -292,7 +306,14 @@ export interface CollectionOverrideBackend {
   invoice_id: string;
   company_id: string;
   expected_collection_date: string;
+  expected_amount?: number | string;
+  recovery_probability?: number | string;
+  commitment_source?: string;
+  expected_inflow_amount?: number | string;
   notes?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 // FX Intelligence

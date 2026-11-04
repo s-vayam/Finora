@@ -91,17 +91,20 @@ def generate_cashflow_forecast(
 
     horizon_end_date = as_of_date + timedelta(days=horizon_days)
 
-    # 2. Inflow Forecast (from Stage 4B)
+    # 2. Inflow Forecast (from Stage 4B & Phase 7 Overdue Recovery)
     inflows_res = forecast_invoice_collections(
         db, company_id=company_id, as_of_date=as_of_date, horizon_days=horizon_days, base_currency=base_currency
     )
 
     scheduled_inflows: List[Dict[str, Any]] = []
     collections_delayed_outside_horizon = Decimal("0.00")
+    scheduled_collections_horizon = Decimal("0.00")
+    overdue_recovery_horizon = Decimal("0.00")
 
     for ev in inflows_res["scheduled_events"]:
         ev_date = ev["date"]
         ev_amt = ev["amount"]
+        ev_type = ev.get("collection_type", "RULE_BASED")
 
         # Apply What-If payment delay if simulated
         if payment_delay_days > 0:
@@ -111,10 +114,35 @@ def generate_cashflow_forecast(
             scheduled_inflows.append({
                 "date": ev_date,
                 "amount": ev_amt,
-                "type": ev["collection_type"],
+                "type": ev_type,
             })
+            if ev_type in ("OVERDUE_RECOVERY", "MANUAL_COMMITMENT", "MANUAL_OVERRIDE"):
+                overdue_recovery_horizon += ev_amt
+            else:
+                scheduled_collections_horizon += ev_amt
         else:
             collections_delayed_outside_horizon += ev_amt
+
+    # Actual Financial Activity (Respects opening balance snapshot effective date)
+    from app.models.cash_transaction import CashTransaction
+    actual_txns = (
+        db.query(CashTransaction)
+        .filter(
+            CashTransaction.company_id == company_id,
+            CashTransaction.currency == base_currency,
+            CashTransaction.transaction_date >= as_of_date,
+            CashTransaction.transaction_date <= horizon_end_date,
+        )
+        .all()
+    )
+    actual_inflows = sum(
+        (Decimal(str(t.amount)) for t in actual_txns if str(t.transaction_type).upper() == "INFLOW"),
+        Decimal("0.00"),
+    )
+    actual_outflows = sum(
+        (Decimal(str(t.amount)) for t in actual_txns if str(t.transaction_type).upper() == "OUTFLOW"),
+        Decimal("0.00"),
+    )
 
     # 3. Outflow Forecast (from Stage 4C)
     outflows_res = forecast_expenses_and_outflows(
@@ -356,6 +384,9 @@ def generate_cashflow_forecast(
     forecast_id = f"CF-{uuid.uuid4().hex[:12].upper()}"
     final_closing = daily_projections[-1]["closing_balance"]
     net_cf = cumulative_inflows - cumulative_outflows
+    total_expected_inflows = scheduled_collections_horizon + overdue_recovery_horizon
+    projected_outflows = cumulative_outflows
+    projected_closing = opening_balance + total_expected_inflows - projected_outflows
 
     summary_data = {
         "opening_balance": opening_balance,
@@ -363,6 +394,13 @@ def generate_cashflow_forecast(
         "expected_outflows": cumulative_outflows,
         "net_cash_flow": net_cf,
         "closing_balance": final_closing,
+        "actual_inflows": actual_inflows,
+        "actual_outflows": actual_outflows,
+        "scheduled_collections": scheduled_collections_horizon,
+        "overdue_recovery_forecast": overdue_recovery_horizon,
+        "total_expected_inflows": total_expected_inflows,
+        "projected_outflows": projected_outflows,
+        "projected_closing_balance": projected_closing,
         "minimum_projected_balance": min_projected_balance,
         "minimum_balance_date": min_balance_date,
         "days_below_threshold": days_below_threshold,
@@ -380,6 +418,13 @@ def generate_cashflow_forecast(
         "total_outflow": cumulative_outflows,
         "net_cash_flow": net_cf,
         "closing_balance": final_closing,
+        "actual_inflows": actual_inflows,
+        "actual_outflows": actual_outflows,
+        "scheduled_collections": scheduled_collections_horizon,
+        "overdue_recovery_forecast": overdue_recovery_horizon,
+        "total_expected_inflows": total_expected_inflows,
+        "projected_outflows": projected_outflows,
+        "projected_closing_balance": projected_closing,
         "forecast_reliability": reliability.value,
         "data_freshness": data_freshness_dict,
         "summary": summary_data,

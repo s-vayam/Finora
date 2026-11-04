@@ -19,6 +19,17 @@ class Settings(BaseSettings):
     ]
     LOG_LEVEL: str = "INFO"
 
+    # FX Provider & Scheduler Settings
+    FX_PROVIDER: str = "EXCHANGERATE_DEV"
+    EXCHANGERATE_API_KEY: str = ""
+    EXCHANGERATE_API_BASE: str = "https://api.exchangerate.dev/v1"
+    FX_REFRESH_INTERVAL_MINUTES: int = 60
+    FX_REQUEST_TIMEOUT_SECONDS: int = 15
+    FX_MAX_RETRIES: int = 3
+    FX_REFERENCE_MAX_AGE_DAYS: int = 7
+    FX_SCHEDULER_ENABLED: bool = False
+    FX_MONTHLY_REQUEST_BUDGET: int = 1000
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:

@@ -53,6 +53,11 @@ from app.schemas.cashflow_forecast import (
     WhatIfScenarioRequest,
     ScenarioComparisonResponse,
 )
+from app.schemas.fx import (
+    FxRateResponse,
+    FxQuotaStatus,
+    FxFetchResult,
+)
 
 __all__ = [
     "PaginatedResponse",
@@ -102,4 +107,7 @@ __all__ = [
     "ForecastGenerateRequest",
     "WhatIfScenarioRequest",
     "ScenarioComparisonResponse",
+    "FxRateResponse",
+    "FxQuotaStatus",
+    "FxFetchResult",
 ]

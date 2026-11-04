@@ -53,3 +53,7 @@ data/database/backups/
 data/raw/payment_date_dataset/
 data/raw/rbi_forex/
 
+# Process and runtime locks
+*.lock
+data/*.lock
+

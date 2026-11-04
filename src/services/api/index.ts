@@ -14,6 +14,9 @@ import {
   PaymentBackend,
   PaymentCreateRequest,
   PaymentHistoryResponse,
+  ExpenseBackend,
+  ExpensePaymentBackend,
+  ExpensePaymentCreateRequest,
   PaymentRiskPrediction,
   PaymentRiskStatusResponse,
   CashPositionBackend,
@@ -125,6 +128,51 @@ export const paymentsApi = {
       params: { company_id: companyId, page_size: limit },
       signal,
     }),
+};
+
+// Expenses & Disbursements API
+export const expensesApi = {
+  listExpenses: (
+    params?: {
+      company_id?: string;
+      category?: string;
+      status?: string;
+      page?: number;
+      page_size?: number;
+    },
+    signal?: AbortSignal
+  ) =>
+    apiClient.get<PaginatedResponse<ExpenseBackend>>(API_ENDPOINTS.expenses, {
+      params: {
+        company_id: DEFAULT_COMPANY_ID,
+        page_size: 100,
+        ...params,
+      },
+      signal,
+    }),
+
+  getExpense: (expenseId: string, signal?: AbortSignal) =>
+    apiClient.get<ExpenseBackend>(`${API_ENDPOINTS.expenses}/${expenseId}`, { signal }),
+
+  recordPayment: (
+    expenseId: string,
+    data: ExpensePaymentCreateRequest,
+    idempotencyKey?: string,
+    signal?: AbortSignal
+  ) => {
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
+    }
+    return apiClient.post<ExpensePaymentBackend>(
+      `${API_ENDPOINTS.expenses}/${expenseId}/payments`,
+      data,
+      { headers, signal }
+    );
+  },
+
+  getExpensePayments: (expenseId: string, signal?: AbortSignal) =>
+    apiClient.get<ExpensePaymentBackend[]>(`${API_ENDPOINTS.expenses}/${expenseId}/payments`, { signal }),
 };
 
 // Payment Risk ML API

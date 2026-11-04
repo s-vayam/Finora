@@ -20,6 +20,7 @@ export const API_ENDPOINTS = {
   metaSummary: `${API_V1_PREFIX}/meta/data-summary`,
   customers: `${API_V1_PREFIX}/customers`,
   invoices: `${API_V1_PREFIX}/invoices`,
+  expenses: `${API_V1_PREFIX}/expenses`,
   payments: `${API_V1_PREFIX}/payments`,
   predictPaymentRisk: `${API_V1_PREFIX}/predict/payment-risk`,
   mlRiskStatus: `${API_V1_PREFIX}/ml/payment-risk/status`,

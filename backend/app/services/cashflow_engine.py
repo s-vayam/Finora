@@ -133,6 +133,7 @@ def generate_cashflow_forecast(
             CashTransaction.transaction_date >= as_of_date,
             CashTransaction.transaction_date <= horizon_end_date,
         )
+        .order_by(CashTransaction.transaction_date.desc(), CashTransaction.transaction_id.desc())
         .all()
     )
     actual_inflows = sum(
@@ -143,6 +144,23 @@ def generate_cashflow_forecast(
         (Decimal(str(t.amount)) for t in actual_txns if str(t.transaction_type).upper() == "OUTFLOW"),
         Decimal("0.00"),
     )
+    actual_closing_balance = opening_balance + actual_inflows - actual_outflows
+
+    actual_tx_list: List[Dict[str, Any]] = []
+    for t in actual_txns:
+        actual_tx_list.append({
+            "transaction_id": t.transaction_id,
+            "transaction_date": t.transaction_date.isoformat() if hasattr(t.transaction_date, "isoformat") else str(t.transaction_date),
+            "transaction_type": str(t.transaction_type).upper(),
+            "category": t.category,
+            "amount": Decimal(str(t.amount)),
+            "currency": t.currency,
+            "reference_id": t.linked_invoice_id or t.linked_expense_id or "",
+            "linked_invoice_id": t.linked_invoice_id,
+            "linked_expense_id": t.linked_expense_id,
+            "counterparty": t.counterparty_id or ("Customer" if str(t.transaction_type).upper() == "INFLOW" else f"Vendor ({t.category})"),
+            "description": t.description or "",
+        })
 
     # 3. Outflow Forecast (from Stage 4C)
     outflows_res = forecast_expenses_and_outflows(
@@ -396,6 +414,8 @@ def generate_cashflow_forecast(
         "closing_balance": final_closing,
         "actual_inflows": actual_inflows,
         "actual_outflows": actual_outflows,
+        "actual_closing_balance": actual_closing_balance,
+        "actual_transactions": actual_tx_list,
         "scheduled_collections": scheduled_collections_horizon,
         "overdue_recovery_forecast": overdue_recovery_horizon,
         "total_expected_inflows": total_expected_inflows,
@@ -420,6 +440,8 @@ def generate_cashflow_forecast(
         "closing_balance": final_closing,
         "actual_inflows": actual_inflows,
         "actual_outflows": actual_outflows,
+        "actual_closing_balance": actual_closing_balance,
+        "actual_transactions": actual_tx_list,
         "scheduled_collections": scheduled_collections_horizon,
         "overdue_recovery_forecast": overdue_recovery_horizon,
         "total_expected_inflows": total_expected_inflows,

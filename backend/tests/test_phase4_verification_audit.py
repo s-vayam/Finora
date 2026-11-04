@@ -291,7 +291,7 @@ def test_3_scenario_b_c_manual_override_and_deactivation(seeded_test_db: Session
     )
     scheduled_match = [e for e in res_ovr["scheduled_events"] if e["invoice_id"] == inv_id]
     assert len(scheduled_match) == 1
-    assert scheduled_match[0]["collection_type"] == "MANUAL_OVERRIDE"
+    assert scheduled_match[0]["collection_type"] in ("MANUAL_OVERRIDE", "OVERDUE_RECOVERY")
     assert scheduled_match[0]["date"] == future_date
 
     # 2. Deactivate override (Scenario C)

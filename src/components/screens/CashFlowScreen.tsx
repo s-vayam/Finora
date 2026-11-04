@@ -11,7 +11,13 @@ import {
   TrendingDown,
   Info,
   Edit2,
-  X
+  X,
+  CreditCard,
+  Receipt,
+  History,
+  DollarSign,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -25,13 +31,16 @@ import {
   Legend 
 } from 'recharts';
 import { CashFlowMonth } from '../../types';
-import { cashflowApi } from '../../services/api';
+import { cashflowApi, expensesApi } from '../../services/api';
 import { 
   CashPositionBackend, 
   CashflowForecastResponse, 
   CashflowAlertItem,
   MonthlyCashflowBackend,
-  CashflowScenarioResponse
+  CashflowScenarioResponse,
+  ExpenseBackend,
+  ExpensePaymentBackend,
+  ActualCashTransaction
 } from '../../services/api/types';
 import { LoadingState, ErrorBanner } from '../common/ApiStateHelpers';
 
@@ -74,6 +83,31 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
   const [editPositionLoading, setEditPositionLoading] = useState(false);
   const [editPositionError, setEditPositionError] = useState<string | null>(null);
   const [editPositionSuccess, setEditPositionSuccess] = useState<string | null>(null);
+
+  // Expense & Disbursement states
+  const [expenses, setExpenses] = useState<ExpenseBackend[]>([]);
+  const [expensesLoading, setExpensesLoading] = useState(false);
+  const [expenseFilter, setExpenseFilter] = useState<'ALL' | 'UNPAID' | 'PARTIALLY_PAID' | 'PAID'>('ALL');
+  const [showPayablesSection, setShowPayablesSection] = useState(true);
+  
+  // Record Expense Payment Modal state
+  const [selectedExpenseForPayment, setSelectedExpenseForPayment] = useState<ExpenseBackend | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [paymentMethod, setPaymentMethod] = useState('BANK_TRANSFER');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
+  const [recordingPayment, setRecordingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
+
+  // Expense Payment History Modal state
+  const [selectedExpenseForHistory, setSelectedExpenseForHistory] = useState<ExpenseBackend | null>(null);
+  const [historyPayments, setHistoryPayments] = useState<ExpensePaymentBackend[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Reconciled movements feed view toggle
+  const [showAllActualTxns, setShowAllActualTxns] = useState(false);
 
   // Loading & error states
   const [loading, setLoading] = useState(true);
@@ -134,9 +168,102 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
     }
   }, [horizonDays]);
 
+  const loadExpenses = useCallback(async () => {
+    setExpensesLoading(true);
+    try {
+      const res = await expensesApi.listExpenses({ page_size: 100 });
+      setExpenses(res.items || []);
+    } catch (err) {
+      console.error('Failed to load expenses', err);
+    } finally {
+      setExpensesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadPositionAndForecast();
-  }, [loadPositionAndForecast]);
+    loadExpenses();
+  }, [loadPositionAndForecast, loadExpenses]);
+
+  const handleOpenPaymentModal = (exp: ExpenseBackend) => {
+    setSelectedExpenseForPayment(exp);
+    const outstanding = Number(exp.outstanding_amount ?? (Number(exp.amount) - Number(exp.amount_paid || 0)));
+    setPaymentAmount(outstanding > 0 ? outstanding.toFixed(2) : '');
+    setPaymentDate(new Date().toISOString().split('T')[0]);
+    setPaymentMethod('BANK_TRANSFER');
+    setReferenceNumber('');
+    setPaymentNotes('');
+    setPaymentError(null);
+    setPaymentSuccess(null);
+  };
+
+  const handleRecordExpensePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedExpenseForPayment) return;
+
+    const amt = parseFloat(paymentAmount);
+    const outstanding = Number(selectedExpenseForPayment.outstanding_amount ?? (Number(selectedExpenseForPayment.amount) - Number(selectedExpenseForPayment.amount_paid || 0)));
+
+    if (isNaN(amt) || amt <= 0) {
+      setPaymentError('Disbursement amount must be greater than zero.');
+      return;
+    }
+    if (amt > outstanding + 0.001) {
+      setPaymentError(`Payment amount (₹${amt.toLocaleString()}) cannot exceed remaining balance of ₹${outstanding.toLocaleString()}.`);
+      return;
+    }
+
+    setRecordingPayment(true);
+    setPaymentError(null);
+    setPaymentSuccess(null);
+    try {
+      const idemKey = `IDEM-EXP-${selectedExpenseForPayment.expense_id}-${Date.now()}`;
+      await expensesApi.recordPayment(
+        selectedExpenseForPayment.expense_id,
+        {
+          amount: amt,
+          payment_date: paymentDate,
+          payment_method: paymentMethod,
+          reference_number: referenceNumber.trim() || undefined,
+          notes: paymentNotes.trim() || undefined,
+          currency: selectedExpenseForPayment.currency || 'INR',
+        },
+        idemKey
+      );
+
+      setPaymentSuccess(`Disbursement of ₹${amt.toLocaleString()} recorded successfully.`);
+      
+      // Refresh expenses and cashflow forecast simultaneously
+      await Promise.all([
+        loadExpenses(),
+        loadPositionAndForecast(),
+      ]);
+
+      setTimeout(() => {
+        setSelectedExpenseForPayment(null);
+        setPaymentSuccess(null);
+      }, 1200);
+    } catch (err: any) {
+      const msg = err?.data?.detail || err?.message || 'Failed to record expense disbursement.';
+      setPaymentError(msg);
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
+
+  const handleViewExpenseHistory = async (exp: ExpenseBackend) => {
+    setSelectedExpenseForHistory(exp);
+    setHistoryLoading(true);
+    try {
+      const payments = await expensesApi.getExpensePayments(exp.expense_id);
+      setHistoryPayments(payments || []);
+    } catch (err) {
+      console.error('Failed to load expense payments', err);
+      setHistoryPayments(exp.payments || []);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   // Create opening cash position
   const handleCreatePosition = async (e: React.FormEvent) => {
@@ -293,6 +420,22 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
   const openingNum = Number(summary?.opening_balance ?? forecast?.opening_balance ?? position?.balance_amount ?? 0);
   const actualInflowsNum = Number(summary?.actual_inflows ?? forecast?.actual_inflows ?? 0);
   const actualOutflowsNum = Number(summary?.actual_outflows ?? forecast?.actual_outflows ?? 0);
+  const actualClosingBalanceNum = Number(summary?.actual_closing_balance ?? forecast?.actual_closing_balance ?? (openingNum + actualInflowsNum - actualOutflowsNum));
+  const actualTransactions: ActualCashTransaction[] = forecast?.actual_transactions ?? summary?.actual_transactions ?? [];
+
+  const filteredExpenses = useMemo(() => {
+    if (expenseFilter === 'ALL') return expenses;
+    return expenses.filter((e) => {
+      const tot = Number(e.amount);
+      const paid = Number(e.amount_paid || 0);
+      const out = Number(e.outstanding_amount ?? Math.max(0, tot - paid));
+      if (expenseFilter === 'PAID') return out <= 0.001 || e.payment_status === 'PAID' || e.status === 'PAID';
+      if (expenseFilter === 'PARTIALLY_PAID') return paid > 0 && out > 0.001;
+      if (expenseFilter === 'UNPAID') return paid === 0 && out > 0.001;
+      return true;
+    });
+  }, [expenses, expenseFilter]);
+
   const scheduledCollectionsNum = Number(summary?.scheduled_collections ?? forecast?.scheduled_collections ?? 0);
   const overdueRecoveryNum = Number(summary?.overdue_recovery_forecast ?? forecast?.overdue_recovery_forecast ?? 0);
   const totalExpectedInflowsNum = Number(summary?.total_expected_inflows ?? forecast?.total_expected_inflows ?? summary?.expected_inflows ?? forecast?.total_inflow ?? 0);
@@ -777,35 +920,105 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-[#39765A]" />
                 <h4 className="font-bold text-xs text-[#111111] uppercase tracking-wider">
-                  Actual Financial Activity (Ledger)
+                  Actual Financial Activity (Ledger Settlements)
                 </h4>
               </div>
               <span className="text-[10px] text-[#8B8D86]">
                 Post-snapshot movements
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
               <div className="p-2.5 bg-[#F5F5F2] rounded-lg">
-                <span className="text-[10px] text-[#8B8D86] block">Opening Liquidity</span>
+                <span className="text-[10px] text-[#8B8D86] block">Opening Balance</span>
                 <span className="text-sm font-bold text-[#111111]">
                   ₹{(openingNum / 100000).toFixed(2)} L
                 </span>
               </div>
               <div className="p-2.5 bg-[#F5F5F2] rounded-lg">
-                <span className="text-[10px] text-[#8B8D86] block">Actual Inflows</span>
+                <span className="text-[10px] text-[#39765A] block font-semibold">+ Actual Inflows</span>
                 <span className="text-sm font-bold text-[#39765A]">
                   ₹{(actualInflowsNum / 100000).toFixed(2)} L
                 </span>
               </div>
               <div className="p-2.5 bg-[#F5F5F2] rounded-lg">
-                <span className="text-[10px] text-[#8B8D86] block">Actual Outflows</span>
+                <span className="text-[10px] text-[#B94A48] block font-semibold">- Actual Outflows</span>
                 <span className="text-sm font-bold text-[#B94A48]">
                   ₹{(actualOutflowsNum / 100000).toFixed(2)} L
                 </span>
               </div>
+              <div className="p-2.5 bg-[#F5F5F2] rounded-lg border border-[#244E3D]">
+                <span className="text-[10px] text-[#244E3D] block font-semibold">= Closing Balance</span>
+                <span className="text-sm font-bold text-[#244E3D]">
+                  ₹{(actualClosingBalanceNum / 100000).toFixed(2)} L
+                </span>
+              </div>
+            </div>
+
+            {/* Formula Banner */}
+            <div className="p-2 bg-[#F9F9F8] rounded border border-[#E7E7E2] text-[10px] text-[#8B8D86] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+              <span>Formula: Closing = Opening (₹{(openingNum / 100000).toFixed(2)}L) + Inflows (₹{(actualInflowsNum / 100000).toFixed(2)}L) − Outflows (₹{(actualOutflowsNum / 100000).toFixed(2)}L)</span>
+              <span className="font-semibold text-[#244E3D]">₹{(actualClosingBalanceNum / 100000).toFixed(2)} L</span>
+            </div>
+
+            {/* Reconciled Settlements Feed */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-[#111111] flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5 text-[#8B8D86]" />
+                  Reconciled Movements ({actualTransactions.length})
+                </span>
+                {actualTransactions.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllActualTxns(!showAllActualTxns)}
+                    className="text-[10px] text-[#244E3D] hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                  >
+                    {showAllActualTxns ? 'Show less' : `Show all (${actualTransactions.length})`}
+                    {showAllActualTxns ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                )}
+              </div>
+
+              {actualTransactions.length === 0 ? (
+                <p className="text-[10px] text-[#8B8D86] italic py-2">
+                  No actual settlements recorded on or after {position ? position.as_of_date : 'the opening position date'}. Pre-snapshot historical transactions are preserved in Opening Liquidity.
+                </p>
+              ) : (
+                <div className="max-h-48 overflow-y-auto border border-[#E7E7E2] rounded-lg divide-y divide-[#F5F5F2]">
+                  {(showAllActualTxns ? actualTransactions : actualTransactions.slice(0, 4)).map((tx) => (
+                    <div key={tx.transaction_id} className="p-2 flex items-center justify-between text-[11px] hover:bg-[#F9F9F8] transition-colors">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                          tx.transaction_type === 'INFLOW' 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        }`}>
+                          {tx.transaction_type}
+                        </span>
+                        <div>
+                          <div className="font-semibold text-[#111111] flex items-center gap-1.5">
+                            <span>{tx.reference_id || tx.transaction_id}</span>
+                            {tx.counterparty && (
+                              <span className="text-[10px] text-[#8B8D86]">({tx.counterparty})</span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-[#8B8D86]">{tx.transaction_date} • {tx.category}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`font-bold font-mono ${
+                          tx.transaction_type === 'INFLOW' ? 'text-[#39765A]' : 'text-[#B94A48]'
+                        }`}>
+                          {tx.transaction_type === 'INFLOW' ? '+' : '-'}₹{Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <p className="text-[10px] text-[#8B8D86] leading-relaxed">
-              * Reconciled ledger settlements effective on or after {position ? position.as_of_date : 'the opening position date'}. Pre-snapshot historical transactions are preserved in Opening Liquidity without double-counting.
+              * Reconciled settlements effective on or after {position ? position.as_of_date : 'the opening position date'}. Pre-snapshot historical transactions are preserved in Opening Liquidity without double-counting.
             </p>
           </div>
 
@@ -857,6 +1070,165 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
           </div>
         </div>
       )}
+
+      {/* Operating Expenses & Vendor Payables Management */}
+      <div className="bg-white rounded-xl border border-[#E7E7E2] shadow-xs overflow-hidden">
+        <div className="p-4 border-b border-[#E7E7E2] bg-[#F5F5F2] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Receipt className="w-5 h-5 text-[#244E3D]" />
+            <div>
+              <h3 className="font-bold text-sm text-[#111111] flex items-center gap-2">
+                Operating Expenses & Vendor Payables
+                <span className="text-[10px] font-semibold bg-[#244E3D] text-white px-2 py-0.5 rounded-full">
+                  {expenses.length} Records
+                </span>
+              </h3>
+              <p className="text-xs text-[#8B8D86]">
+                Track vendor commitments, record actual disbursements, and reconcile OUTFLOW cash transactions
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-[#E7E7E2]">
+              {(['ALL', 'UNPAID', 'PARTIALLY_PAID', 'PAID'] as const).map((filterKey) => (
+                <button
+                  key={filterKey}
+                  type="button"
+                  onClick={() => setExpenseFilter(filterKey)}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                    expenseFilter === filterKey
+                      ? 'bg-[#244E3D] text-white shadow-xs'
+                      : 'text-[#8B8D86] hover:text-[#111111] hover:bg-[#F5F5F2]'
+                  }`}
+                >
+                  {filterKey === 'ALL'
+                    ? `All (${expenses.length})`
+                    : filterKey === 'UNPAID'
+                    ? `Unpaid (${expenses.filter((e) => Number(e.amount_paid || 0) === 0 && (Number(e.outstanding_amount ?? e.amount) > 0)).length})`
+                    : filterKey === 'PARTIALLY_PAID'
+                    ? `Partial (${expenses.filter((e) => Number(e.amount_paid || 0) > 0 && Number(e.outstanding_amount ?? 1) > 0).length})`
+                    : `Settled (${expenses.filter((e) => e.payment_status === 'PAID' || Number(e.outstanding_amount ?? 0) <= 0).length})`}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowPayablesSection(!showPayablesSection)}
+              className="p-1.5 text-[#8B8D86] hover:text-[#111111] rounded hover:bg-white border border-transparent hover:border-[#E7E7E2] transition-colors cursor-pointer"
+              title={showPayablesSection ? 'Collapse section' : 'Expand section'}
+            >
+              {showPayablesSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {showPayablesSection && (
+          <>
+            {expensesLoading ? (
+              <div className="p-8 text-center">
+                <LoadingState label="Loading operating expenses..." />
+              </div>
+            ) : filteredExpenses.length === 0 ? (
+              <div className="p-8 text-center text-[#8B8D86] text-xs">
+                No operating expenses found matching filter <span className="font-semibold text-[#111111]">"{expenseFilter}"</span>.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#E7E7E2] text-[#8B8D86] text-[11px] font-semibold bg-[#F9F9F8]">
+                      <th className="py-2.5 px-4">Expense ID</th>
+                      <th className="py-2.5 px-4">Category</th>
+                      <th className="py-2.5 px-4">Issue / Due Date</th>
+                      <th className="py-2.5 px-4 text-right">Total Amount</th>
+                      <th className="py-2.5 px-4 text-right">Amount Paid</th>
+                      <th className="py-2.5 px-4 text-right">Remaining Payable</th>
+                      <th className="py-2.5 px-4 text-center">Payment Status</th>
+                      <th className="py-2.5 px-4 text-right">Disbursement Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F5F5F2]">
+                    {filteredExpenses.map((exp) => {
+                      const tot = Number(exp.amount);
+                      const paid = Number(exp.amount_paid || 0);
+                      const outstanding = Number(exp.outstanding_amount ?? Math.max(0, tot - paid));
+                      const isPaid = exp.payment_status === 'PAID' || exp.status === 'PAID' || outstanding <= 0.001;
+                      const isPartial = exp.payment_status === 'PARTIALLY_PAID' || (paid > 0 && !isPaid);
+
+                      return (
+                        <tr key={exp.expense_id} className="hover:bg-[#F5F5F2] transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-[#111111]">
+                            {exp.expense_id}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#EFEFEA] text-[#111111] uppercase tracking-wide">
+                              {exp.category}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-[11px] text-[#8B8D86]">
+                            <div>Issue: {exp.expense_date}</div>
+                            <div className="font-semibold text-[#111111]">Due: {exp.due_date}</div>
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-[#111111]">
+                            ₹{tot.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4 text-right font-medium text-[#39765A]">
+                            ₹{paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-[#B94A48]">
+                            ₹{outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              isPaid 
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : isPartial
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-neutral-100 text-neutral-700 border border-neutral-300'
+                            }`}>
+                              {isPaid ? 'PAID' : isPartial ? 'PARTIALLY PAID' : 'UNPAID'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleViewExpenseHistory(exp)}
+                                className="p-1.5 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200 rounded transition-colors cursor-pointer"
+                                title="View Disbursement History"
+                              >
+                                <History className="w-4 h-4" />
+                              </button>
+                              {!isPaid ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenPaymentModal(exp)}
+                                  className="px-2.5 py-1 bg-[#244E3D] hover:bg-[#1C3E30] text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer shadow-xs flex items-center gap-1"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  Record Payment
+                                </button>
+                              ) : (
+                                <span className="text-[11px] text-[#8B8D86] italic pr-2">Settled</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="px-4 py-2.5 bg-[#F9F9F8] border-t border-[#E7E7E2] text-[10px] text-[#8B8D86] flex flex-col sm:flex-row items-center justify-between gap-1">
+              <span>* Recording a payment immediately creates an actual OUTFLOW cash transaction and updates Actual Closing Balance.</span>
+              <span>Idempotent execution with overpayment prevention</span>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Liquidity Alerts Banner */}
       {alerts && alerts.length > 0 && (
@@ -1018,6 +1390,245 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
           <span>Verified against Finora Phase 4 Predictive Cash Flow Engine</span>
         </div>
       </div>
+
+      {/* Record Expense Payment Modal */}
+      {selectedExpenseForPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl border border-[#244E3D] shadow-xl w-full max-w-lg p-5 space-y-4">
+            <div className="flex items-start justify-between pb-3 border-b border-[#E7E7E2]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-[#244E3D]" />
+                  <h4 className="font-bold text-sm text-[#111111]">
+                    Record Expense Disbursement
+                  </h4>
+                </div>
+                <p className="text-[11px] text-[#8B8D86] mt-0.5">
+                  Expense ID: <span className="font-mono text-neutral-800 font-semibold">{selectedExpenseForPayment.expense_id}</span> ({selectedExpenseForPayment.category})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedExpenseForPayment(null);
+                  setPaymentError(null);
+                  setPaymentSuccess(null);
+                }}
+                className="p-1 text-[#8B8D86] hover:text-[#111111] rounded hover:bg-[#F5F5F2] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Financial Overview Card */}
+            {(() => {
+              const tot = Number(selectedExpenseForPayment.amount);
+              const paid = Number(selectedExpenseForPayment.amount_paid || 0);
+              const outstanding = Number(selectedExpenseForPayment.outstanding_amount ?? Math.max(0, tot - paid));
+              return (
+                <div className="grid grid-cols-3 gap-2 text-center p-3 bg-[#F5F5F2] rounded-lg">
+                  <div>
+                    <span className="text-[10px] text-[#8B8D86] block">Total Expense</span>
+                    <span className="text-xs font-bold text-[#111111]">₹{tot.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#8B8D86] block">Already Paid</span>
+                    <span className="text-xs font-bold text-[#39765A]">₹{paid.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#8B8D86] block">Remaining Payable</span>
+                    <span className="text-xs font-bold text-[#B94A48]">₹{outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Payment Form */}
+            <form onSubmit={handleRecordExpensePayment} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-neutral-700">Disbursement Amount (₹)</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tot = Number(selectedExpenseForPayment.amount);
+                        const paid = Number(selectedExpenseForPayment.amount_paid || 0);
+                        const out = Number(selectedExpenseForPayment.outstanding_amount ?? Math.max(0, tot - paid));
+                        setPaymentAmount(out.toFixed(2));
+                      }}
+                      className="text-[10px] text-[#244E3D] hover:underline font-semibold cursor-pointer"
+                    >
+                      Pay Full Balance
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs font-mono"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-700 block mb-1">Payment Date</label>
+                  <input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-700 block mb-1">Payment Method</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs"
+                  >
+                    <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
+                    <option value="ACH">ACH / Direct Debit</option>
+                    <option value="WIRE_TRANSFER">Wire Transfer / RTGS</option>
+                    <option value="UPI">UPI</option>
+                    <option value="CHEQUE">Cheque</option>
+                    <option value="CREDIT_CARD">Corporate Card</option>
+                    <option value="CASH">Cash</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-bold text-neutral-700 block mb-1">Reference / UTR Number</label>
+                  <input
+                    type="text"
+                    value={referenceNumber}
+                    onChange={(e) => setReferenceNumber(e.target.value)}
+                    placeholder="e.g. UTR-9283719"
+                    className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-neutral-700 block mb-1">Disbursement Notes (Optional)</label>
+                <input
+                  type="text"
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  placeholder="e.g. Approved by Finance Committee"
+                  className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs"
+                />
+              </div>
+
+              {paymentError && (
+                <div className="p-2.5 rounded-lg bg-[#FDF2F2] border border-[#F6CECE] text-[#B94A48] text-[11px]">
+                  {paymentError}
+                </div>
+              )}
+
+              {paymentSuccess && (
+                <div className="p-2.5 rounded-lg bg-[#E6F4EA] border border-[#A8DAB5] text-[#244E3D] text-[11px] font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" />
+                  {paymentSuccess}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#E7E7E2]">
+                <button
+                  type="button"
+                  onClick={() => setSelectedExpenseForPayment(null)}
+                  className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={recordingPayment}
+                  className="px-4 py-2 bg-[#244E3D] hover:bg-[#1C3E30] text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  {recordingPayment ? 'Recording...' : 'Confirm Disbursement'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Expense Payment History Modal */}
+      {selectedExpenseForHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl border border-[#E7E7E2] shadow-xl w-full max-w-lg p-5 space-y-4">
+            <div className="flex items-start justify-between pb-3 border-b border-[#E7E7E2]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <History className="w-5 h-5 text-[#244E3D]" />
+                  <h4 className="font-bold text-sm text-[#111111]">
+                    Disbursement History
+                  </h4>
+                </div>
+                <p className="text-[11px] text-[#8B8D86] mt-0.5">
+                  Expense ID: <span className="font-mono text-neutral-800 font-semibold">{selectedExpenseForHistory.expense_id}</span> ({selectedExpenseForHistory.category})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedExpenseForHistory(null)}
+                className="p-1 text-[#8B8D86] hover:text-[#111111] rounded hover:bg-[#F5F5F2] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {historyLoading ? (
+              <div className="p-6 text-center">
+                <LoadingState label="Loading payment history..." />
+              </div>
+            ) : historyPayments.length === 0 ? (
+              <div className="p-6 text-center text-[#8B8D86] text-xs">
+                No disbursements recorded yet for this expense.
+              </div>
+            ) : (
+              <div className="max-h-60 overflow-y-auto divide-y divide-[#F5F5F2] border border-[#E7E7E2] rounded-lg">
+                {historyPayments.map((p) => (
+                  <div key={p.payment_id} className="p-3 text-xs space-y-1 hover:bg-[#F9F9F8] transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-[#111111] font-mono">{p.payment_id}</span>
+                      <span className="font-bold text-[#B94A48] font-mono">-₹{Number(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-[#8B8D86]">
+                      <span>Date: {p.payment_date} • Method: {p.payment_method}</span>
+                      {p.reference_number && <span>Ref: {p.reference_number}</span>}
+                    </div>
+                    {p.notes && (
+                      <p className="text-[11px] text-neutral-600 italic">Notes: {p.notes}</p>
+                    )}
+                    <div className="text-[10px] text-[#8B8D86] font-mono">
+                      Cash Txn: {p.cash_transaction_id}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-2 border-t border-[#E7E7E2]">
+              <button
+                type="button"
+                onClick={() => setSelectedExpenseForHistory(null)}
+                className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@ from app.models.company import Company
 from app.models.customer import Customer
 from app.models.invoice import Invoice
 from app.models.expense import Expense
+from app.models.expense_payment import ExpensePayment
 from app.models.cash_transaction import CashTransaction
 from app.models.monthly_cashflow import MonthlyCashflow
 from app.models.payment import Payment
@@ -22,6 +23,7 @@ __all__ = [
     "Customer",
     "Invoice",
     "Expense",
+    "ExpensePayment",
     "CashTransaction",
     "MonthlyCashflow",
     "Payment",

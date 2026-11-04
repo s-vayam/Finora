@@ -43,9 +43,37 @@ def db():
         session.close()
 
 
-def test_overdue_recovery_probability_weighting(db):
+@pytest.fixture
+def sample_overdue_invoice(db):
+    inv_id = f"INV-TEST-OVR-{uuid.uuid4().hex[:6].upper()}"
+    inv = Invoice(
+        invoice_id=inv_id,
+        company_id="FINORA_DEMO",
+        customer_id="CUST001",
+        invoice_date=date(2026, 9, 1),
+        due_date=date(2026, 10, 1),
+        payment_terms_days=30,
+        invoice_amount=Decimal("96261.98"),
+        currency="INR",
+        status="OVERDUE",
+        historical_invoice_count=5,
+        historical_late_rate=Decimal("0.2"),
+    )
+    db.add(inv)
+    db.commit()
+    try:
+        yield inv_id
+    finally:
+        db.query(Payment).filter(Payment.invoice_id == inv_id).delete()
+        db.query(CashTransaction).filter(CashTransaction.linked_invoice_id == inv_id).delete()
+        db.query(CollectionForecastOverride).filter(CollectionForecastOverride.invoice_id == inv_id).delete()
+        db.query(Invoice).filter(Invoice.invoice_id == inv_id).delete()
+        db.commit()
+
+
+def test_overdue_recovery_probability_weighting(db, sample_overdue_invoice):
     """Verify overdue commitment computes Expected Inflow = Amount * Probability exactly."""
-    invoice_id = "INV-000853"
+    invoice_id = sample_overdue_invoice
     payload = CollectionOverrideCreate(
         company_id="FINORA_DEMO",
         invoice_id=invoice_id,
@@ -73,9 +101,9 @@ def test_overdue_recovery_probability_weighting(db):
         deactivate_collection_override(db, ovr.override_id)
 
 
-def test_partial_commitments_and_validation(db):
+def test_partial_commitments_and_validation(db, sample_overdue_invoice):
     """Verify multiple partial commitments and enforcement of remaining balance."""
-    invoice_id = "INV-000853"
+    invoice_id = sample_overdue_invoice
 
     # Commitment 1: 40,000 on Nov 15
     c1 = create_collection_override(db, CollectionOverrideCreate(
@@ -117,9 +145,9 @@ def test_partial_commitments_and_validation(db):
         deactivate_collection_override(db, c2.override_id)
 
 
-def test_duplicate_commitment_prevention(db):
+def test_duplicate_commitment_prevention(db, sample_overdue_invoice):
     """Verify duplicate active commitments on exact date and amount are rejected."""
-    invoice_id = "INV-000853"
+    invoice_id = sample_overdue_invoice
     c1 = create_collection_override(db, CollectionOverrideCreate(
         company_id="FINORA_DEMO",
         invoice_id=invoice_id,
@@ -141,9 +169,9 @@ def test_duplicate_commitment_prevention(db):
         deactivate_collection_override(db, c1.override_id)
 
 
-def test_what_if_delay_impacts_overdue_recovery(db):
+def test_what_if_delay_impacts_overdue_recovery(db, sample_overdue_invoice):
     """Verify What-If payment delay pushes overdue recoveries outside horizon without mutating DB."""
-    invoice_id = "INV-000853"
+    invoice_id = sample_overdue_invoice
     c = create_collection_override(db, CollectionOverrideCreate(
         company_id="FINORA_DEMO",
         invoice_id=invoice_id,

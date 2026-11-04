@@ -191,6 +191,8 @@ class ForecastSummary(BaseModel):
     # Collection breakdown and actual financial activity
     actual_inflows: Decimal = Decimal("0.00")
     actual_outflows: Decimal = Decimal("0.00")
+    actual_closing_balance: Decimal = Decimal("0.00")
+    actual_transactions: List[Dict[str, Any]] = Field(default_factory=list)
     scheduled_collections: Decimal = Decimal("0.00")
     overdue_recovery_forecast: Decimal = Decimal("0.00")
     total_expected_inflows: Decimal = Decimal("0.00")
@@ -234,6 +236,8 @@ class CashflowForecastResponse(BaseModel):
     # Collection breakdown top-level aliases
     actual_inflows: Optional[Decimal] = None
     actual_outflows: Optional[Decimal] = None
+    actual_closing_balance: Optional[Decimal] = None
+    actual_transactions: List[Dict[str, Any]] = Field(default_factory=list)
     scheduled_collections: Optional[Decimal] = None
     overdue_recovery_forecast: Optional[Decimal] = None
     total_expected_inflows: Optional[Decimal] = None

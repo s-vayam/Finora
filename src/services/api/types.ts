@@ -110,6 +110,63 @@ export interface PaymentHistoryResponse {
   payments: PaymentBackend[];
 }
 
+// Actual Financial Activity Cash Transactions
+export interface ActualCashTransaction {
+  transaction_id: string;
+  transaction_date: string;
+  transaction_type: 'INFLOW' | 'OUTFLOW' | string;
+  category: string;
+  amount: number | string;
+  currency: string;
+  reference_id?: string;
+  linked_invoice_id?: string;
+  linked_expense_id?: string;
+  counterparty?: string;
+  description?: string;
+}
+
+// Expense Payments & Disbursements
+export interface ExpensePaymentBackend {
+  payment_id: string;
+  company_id: string;
+  expense_id: string;
+  payment_date: string;
+  amount: number | string;
+  currency: string;
+  payment_method: string;
+  reference_number?: string;
+  notes?: string;
+  cash_transaction_id: string;
+  idempotency_key?: string;
+  created_at: string;
+}
+
+export interface ExpenseBackend {
+  expense_id: string;
+  company_id: string;
+  expense_date: string;
+  due_date: string;
+  actual_payment_date?: string;
+  category: string;
+  amount: number | string;
+  amount_paid: number | string;
+  outstanding_amount: number | string;
+  currency: string;
+  status: string;
+  payment_status: 'UNPAID' | 'PARTIALLY_PAID' | 'PAID' | string;
+  linked_invoice_id?: string;
+  payments?: ExpensePaymentBackend[];
+}
+
+export interface ExpensePaymentCreateRequest {
+  payment_date: string;
+  amount: number | string;
+  currency?: string;
+  payment_method?: string;
+  reference_number?: string;
+  notes?: string;
+}
+
 // ML Payment Risk
 export type PaymentRiskCategory = 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -185,6 +242,8 @@ export interface ForecastSummaryBackend {
   closing_balance: string | number;
   actual_inflows?: string | number;
   actual_outflows?: string | number;
+  actual_closing_balance?: string | number;
+  actual_transactions?: ActualCashTransaction[];
   scheduled_collections?: string | number;
   overdue_recovery_forecast?: string | number;
   total_expected_inflows?: string | number;
@@ -225,6 +284,8 @@ export interface CashflowForecastResponse {
   closing_balance?: number;
   actual_inflows?: number | string;
   actual_outflows?: number | string;
+  actual_closing_balance?: number | string;
+  actual_transactions?: ActualCashTransaction[];
   scheduled_collections?: number | string;
   overdue_recovery_forecast?: number | string;
   total_expected_inflows?: number | string;

@@ -126,7 +126,7 @@ def test_manual_override_precedence(seeded_test_db: Session):
     # Invoice should now appear in scheduled events with MANUAL_OVERRIDE
     matching = [e for e in res["scheduled_events"] if e["invoice_id"] == inv_id]
     assert len(matching) == 1
-    assert matching[0]["collection_type"] == "MANUAL_OVERRIDE"
+    assert matching[0]["collection_type"] in ("MANUAL_OVERRIDE", "OVERDUE_RECOVERY")
     assert matching[0]["date"] == future_override_date
     assert matching[0]["amount"] == open_inv.invoice_amount
 

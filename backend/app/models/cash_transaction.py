@@ -13,6 +13,7 @@ class CashTransaction(Base):
     amount = Column(Numeric(15, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="INR")
     linked_invoice_id = Column(String(50), ForeignKey("invoices.invoice_id", ondelete="SET NULL"), nullable=True, index=True)
+    linked_expense_id = Column(String(50), ForeignKey("expenses.expense_id", ondelete="SET NULL"), nullable=True, index=True)
     counterparty_id = Column(String(50), nullable=True, index=True)
     description = Column(String(500), nullable=False, default="")
 

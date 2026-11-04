@@ -42,12 +42,14 @@ htmlcov/
 data/database/*.db
 data/database/*.sqlite
 data/database/*.sqlite3
+data/database/backups/
 *.db-journal
 *.db-wal
 
-# Keep Development database backup
+# Keep Development database
 !data/database/finora.db
 
 # Raw external ML datasets (do not commit large raw third-party datasets)
 data/raw/payment_date_dataset/
+data/raw/rbi_forex/
 

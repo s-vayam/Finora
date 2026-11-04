@@ -11,6 +11,8 @@ from app.models.cash_balance_snapshot import CashBalanceSnapshot
 from app.models.collection_forecast_override import CollectionForecastOverride
 from app.models.expense_forecast_assumption import ExpenseForecastAssumption
 from app.models.cashflow_forecast_run import CashflowForecastRun
+from app.models.fx_rate_observation import FxRateObservation
+from app.models.fx_fetch_run import FxFetchRun
 
 __all__ = [
     "Base",
@@ -26,4 +28,6 @@ __all__ = [
     "CollectionForecastOverride",
     "ExpenseForecastAssumption",
     "CashflowForecastRun",
+    "FxRateObservation",
+    "FxFetchRun",
 ]

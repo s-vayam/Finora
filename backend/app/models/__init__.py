@@ -6,6 +6,7 @@ from app.models.expense import Expense
 from app.models.cash_transaction import CashTransaction
 from app.models.monthly_cashflow import MonthlyCashflow
 from app.models.payment import Payment
+from app.models.ml_prediction import MLPrediction
 
 __all__ = [
     "Base",
@@ -16,4 +17,5 @@ __all__ = [
     "CashTransaction",
     "MonthlyCashflow",
     "Payment",
+    "MLPrediction",
 ]

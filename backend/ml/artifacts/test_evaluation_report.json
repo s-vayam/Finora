@@ -1,0 +1,58 @@
+{
+  "evaluation_timestamp": "2026-11-04T17:44:41.809127+00:00",
+  "test_split_evaluation": {
+    "total_test_samples": 5874,
+    "late_test_samples": 2315,
+    "classification_metrics_default_threshold": {
+      "roc_auc": 0.8100357624663418,
+      "pr_auc": 0.7685030824148825,
+      "f1_score": 0.6829268292682927,
+      "precision": 0.7015945330296127,
+      "recall": 0.6652267818574514,
+      "brier_score": 0.17212356784301563,
+      "threshold": 0.5,
+      "confusion_matrix": {
+        "tn": 2904,
+        "fp": 655,
+        "fn": 775,
+        "tp": 1540
+      }
+    },
+    "classification_metrics_optimal_threshold": {
+      "roc_auc": 0.8100357624663418,
+      "pr_auc": 0.7685030824148825,
+      "f1_score": 0.6793921423276501,
+      "precision": 0.5949367088607594,
+      "recall": 0.791792656587473,
+      "brier_score": 0.17212356784301563,
+      "threshold": 0.3799999999999999,
+      "confusion_matrix": {
+        "tn": 2311,
+        "fp": 1248,
+        "fn": 482,
+        "tp": 1833
+      }
+    },
+    "regression_metrics": {
+      "mae": 4.895466292803602,
+      "rmse": 10.087593809407242,
+      "r2_score": 0.3382504247313869,
+      "median_absolute_error": 3.045103952063098,
+      "min_predicted_delay": 0.0,
+      "max_predicted_delay": 37.6739264510519
+    }
+  },
+  "open_invoices_inference": {
+    "total_open_evaluated": 9681,
+    "predicted_late_count_default": 4475,
+    "predicted_late_count_optimal": 9159,
+    "risk_categories": {
+      "low": 333,
+      "medium": 7733,
+      "high": 1615
+    },
+    "mean_predicted_probability": 0.5236146568091827,
+    "mean_predicted_delay_days": 7.691834062466448,
+    "median_predicted_delay_days": 7.078705645919645
+  }
+}

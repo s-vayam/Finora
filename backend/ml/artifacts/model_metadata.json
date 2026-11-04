@@ -1,0 +1,36 @@
+{
+  "model_version": "v1.0.0",
+  "trained_at": "2026-11-04T17:44:27.730904+00:00",
+  "training_time_seconds": 7.52,
+  "split_sizes": {
+    "total_cleared_records": 39158,
+    "train": 27410,
+    "validation": 5874,
+    "test": 5874
+  },
+  "classifier": {
+    "model_type": "RandomForestClassifier",
+    "champion_model_name": "random_forest",
+    "optimal_threshold": 0.3799999999999999,
+    "hyperparameters": {
+      "n_estimators": 100,
+      "max_depth": 12,
+      "min_samples_leaf": 5,
+      "class_weight": "balanced"
+    }
+  },
+  "regressor": {
+    "model_type": "Ridge",
+    "champion_model_name": "ridge",
+    "hyperparameters": {
+      "n_estimators": 100,
+      "max_depth": 10,
+      "min_samples_leaf": 5
+    }
+  },
+  "artifacts": {
+    "feature_pipeline": "backend\\ml\\artifacts\\feature_pipeline.joblib",
+    "classifier": "backend\\ml\\artifacts\\payment_classifier.joblib",
+    "regressor": "backend\\ml\\artifacts\\payment_delay_regressor.joblib"
+  }
+}

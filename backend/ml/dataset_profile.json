@@ -1,0 +1,157 @@
+{
+  "dataset_filename": "dataset.csv",
+  "sha256_hash": "139482bdc3325a734474d08f48ceee71ab67c84b106f2a0c0fe9479d71be8431",
+  "total_records": 50000,
+  "total_columns": 19,
+  "columns": [
+    "business_code",
+    "cust_number",
+    "name_customer",
+    "clear_date",
+    "buisness_year",
+    "doc_id",
+    "posting_date",
+    "document_create_date",
+    "document_create_date.1",
+    "due_in_date",
+    "invoice_currency",
+    "document type",
+    "posting_id",
+    "area_business",
+    "total_open_amount",
+    "baseline_create_date",
+    "cust_payment_terms",
+    "invoice_id",
+    "isOpen"
+  ],
+  "column_dtypes": {
+    "business_code": "str",
+    "cust_number": "str",
+    "name_customer": "str",
+    "clear_date": "str",
+    "buisness_year": "int64",
+    "doc_id": "int64",
+    "posting_date": "str",
+    "document_create_date": "int64",
+    "document_create_date.1": "int64",
+    "due_in_date": "int64",
+    "invoice_currency": "str",
+    "document type": "str",
+    "posting_id": "int64",
+    "area_business": "float64",
+    "total_open_amount": "float64",
+    "baseline_create_date": "int64",
+    "cust_payment_terms": "str",
+    "invoice_id": "float64",
+    "isOpen": "int64"
+  },
+  "missing_counts": {
+    "business_code": 0,
+    "cust_number": 0,
+    "name_customer": 0,
+    "clear_date": 10000,
+    "buisness_year": 0,
+    "doc_id": 0,
+    "posting_date": 0,
+    "document_create_date": 0,
+    "document_create_date.1": 0,
+    "due_in_date": 0,
+    "invoice_currency": 0,
+    "document type": 0,
+    "posting_id": 0,
+    "area_business": 50000,
+    "total_open_amount": 0,
+    "baseline_create_date": 0,
+    "cust_payment_terms": 0,
+    "invoice_id": 6,
+    "isOpen": 0
+  },
+  "missing_percentages": {
+    "business_code": 0.0,
+    "cust_number": 0.0,
+    "name_customer": 0.0,
+    "clear_date": 20.0,
+    "buisness_year": 0.0,
+    "doc_id": 0.0,
+    "posting_date": 0.0,
+    "document_create_date": 0.0,
+    "document_create_date.1": 0.0,
+    "due_in_date": 0.0,
+    "invoice_currency": 0.0,
+    "document type": 0.0,
+    "posting_id": 0.0,
+    "area_business": 100.0,
+    "total_open_amount": 0.0,
+    "baseline_create_date": 0.0,
+    "cust_payment_terms": 0.0,
+    "invoice_id": 0.01,
+    "isOpen": 0.0
+  },
+  "exact_duplicates": 1161,
+  "duplicate_doc_ids": 1161,
+  "duplicate_invoice_ids": 1166,
+  "unique_customers": 1099,
+  "unique_invoices": 48833,
+  "currency_distribution": {
+    "USD": 46081,
+    "CAD": 3919
+  },
+  "payment_terms_top10": {
+    "NAA8": 20118,
+    "NAH4": 13585,
+    "CA10": 3800,
+    "NAC6": 1743,
+    "NAM4": 1385,
+    "NAAX": 1208,
+    "NAD1": 927,
+    "NAU5": 912,
+    "NAGD": 906,
+    "NAG2": 808
+  },
+  "business_code_top10": {
+    "U001": 45359,
+    "CA02": 3917,
+    "U013": 573,
+    "U002": 135,
+    "U005": 11,
+    "U007": 5
+  },
+  "amount_statistics": {
+    "min": 0.72,
+    "max": 668593.36,
+    "mean": 32337.02,
+    "median": 17609.01,
+    "std": 39205.98,
+    "negative_counts": 0,
+    "zero_counts": 0
+  },
+  "date_ranges": {
+    "posting_date": {
+      "min": "2018-12-30",
+      "max": "2020-05-22"
+    },
+    "due_in_date": {
+      "min": "2018-12-24",
+      "max": "2020-07-10"
+    },
+    "clear_date": {
+      "min": "2019-01-03",
+      "max": "2020-05-22",
+      "non_null_count": 40000,
+      "null_count": 10000
+    }
+  },
+  "isOpen_distribution": {
+    "0": 40000,
+    "1": 10000
+  },
+  "amount_stats": {
+    "min": 0.72,
+    "max": 668593.36,
+    "mean": 32337.02,
+    "median": 17609.01,
+    "std": 39205.98,
+    "negative_counts": 0,
+    "zero_counts": 0
+  }
+}

@@ -26,6 +26,13 @@ from app.schemas.payment import (
     PaymentHistoryItem,
     PaymentDetailResponse,
 )
+from app.schemas.prediction import (
+    RiskCategory,
+    PaymentRiskPredictionRequest,
+    PaymentRiskPredictionResponse,
+    MLStatusResponse,
+    MLMetricsResponse,
+)
 
 __all__ = [
     "PaginatedResponse",
@@ -52,4 +59,9 @@ __all__ = [
     "PaymentResponse",
     "PaymentHistoryItem",
     "PaymentDetailResponse",
+    "RiskCategory",
+    "PaymentRiskPredictionRequest",
+    "PaymentRiskPredictionResponse",
+    "MLStatusResponse",
+    "MLMetricsResponse",
 ]

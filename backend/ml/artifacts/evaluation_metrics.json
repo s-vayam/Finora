@@ -1,0 +1,150 @@
+{
+  "classification": {
+    "champion_model_name": "random_forest",
+    "optimal_threshold": 0.3799999999999999,
+    "models_comparison": {
+      "dummy": {
+        "validation_metrics": {
+          "roc_auc": 0.5,
+          "pr_auc": 0.40755873340143,
+          "f1_score": 0.0,
+          "precision": 0.0,
+          "recall": 0.0,
+          "brier_score": 0.24183960089219392,
+          "threshold": 0.5,
+          "confusion_matrix": {
+            "tn": 3480,
+            "fp": 0,
+            "fn": 2394,
+            "tp": 0
+          }
+        },
+        "composite_score": 0.453779366700715
+      },
+      "logistic_regression": {
+        "validation_metrics": {
+          "roc_auc": 0.7468286977021097,
+          "pr_auc": 0.6823078461856062,
+          "f1_score": 0.6236777868185517,
+          "precision": 0.6078509119746233,
+          "recall": 0.6403508771929824,
+          "brier_score": 0.1999674371197225,
+          "threshold": 0.5,
+          "confusion_matrix": {
+            "tn": 2491,
+            "fp": 989,
+            "fn": 861,
+            "tp": 1533
+          }
+        },
+        "composite_score": 0.714568271943858
+      },
+      "random_forest": {
+        "validation_metrics": {
+          "roc_auc": 0.7814292075975379,
+          "pr_auc": 0.7364226690726003,
+          "f1_score": 0.6457665903890161,
+          "precision": 0.7140688259109311,
+          "recall": 0.589390142021721,
+          "brier_score": 0.183864848660153,
+          "threshold": 0.5,
+          "confusion_matrix": {
+            "tn": 2915,
+            "fp": 565,
+            "fn": 983,
+            "tp": 1411
+          }
+        },
+        "composite_score": 0.758925938335069
+      }
+    },
+    "champion_val_at_optimal_threshold": {
+      "roc_auc": 0.7814292075975379,
+      "pr_auc": 0.7364226690726003,
+      "f1_score": 0.6646727656579874,
+      "precision": 0.5741641337386019,
+      "recall": 0.7890559732664996,
+      "brier_score": 0.183864848660153,
+      "threshold": 0.3799999999999999,
+      "confusion_matrix": {
+        "tn": 2079,
+        "fp": 1401,
+        "fn": 505,
+        "tp": 1889
+      }
+    },
+    "champion_test_at_default_threshold": {
+      "roc_auc": 0.8100357624663418,
+      "pr_auc": 0.7685030824148825,
+      "f1_score": 0.6829268292682927,
+      "precision": 0.7015945330296127,
+      "recall": 0.6652267818574514,
+      "brier_score": 0.17212356784301563,
+      "threshold": 0.5,
+      "confusion_matrix": {
+        "tn": 2904,
+        "fp": 655,
+        "fn": 775,
+        "tp": 1540
+      }
+    },
+    "champion_test_at_optimal_threshold": {
+      "roc_auc": 0.8100357624663418,
+      "pr_auc": 0.7685030824148825,
+      "f1_score": 0.6793921423276501,
+      "precision": 0.5949367088607594,
+      "recall": 0.791792656587473,
+      "brier_score": 0.17212356784301563,
+      "threshold": 0.3799999999999999,
+      "confusion_matrix": {
+        "tn": 2311,
+        "fp": 1248,
+        "fn": 482,
+        "tp": 1833
+      }
+    }
+  },
+  "regression": {
+    "champion_model_name": "ridge",
+    "models_comparison": {
+      "dummy_mean": {
+        "validation_metrics": {
+          "mae": 5.400247744079074,
+          "rmse": 7.552586701906866,
+          "r2_score": -0.09308123593546513,
+          "median_absolute_error": 4.874370142625331,
+          "min_predicted_delay": 6.874370142625331,
+          "max_predicted_delay": 6.874370142625331
+        }
+      },
+      "ridge": {
+        "validation_metrics": {
+          "mae": 3.723366304146012,
+          "rmse": 5.513411515506225,
+          "r2_score": 0.4174921022017475,
+          "median_absolute_error": 2.775503212345785,
+          "min_predicted_delay": 0.0,
+          "max_predicted_delay": 44.5781832469885
+        }
+      },
+      "random_forest": {
+        "validation_metrics": {
+          "mae": 4.450915191797955,
+          "rmse": 6.7953038544505056,
+          "r2_score": 0.1151314446552879,
+          "median_absolute_error": 3.0732687374200887,
+          "min_predicted_delay": 2.5838907551970696,
+          "max_predicted_delay": 99.57076881451876
+        }
+      }
+    },
+    "champion_test_metrics": {
+      "mae": 4.895466292803602,
+      "rmse": 10.087593809407242,
+      "r2_score": 0.3382504247313869,
+      "median_absolute_error": 3.045103952063098,
+      "min_predicted_delay": 0.0,
+      "max_predicted_delay": 37.6739264510519
+    }
+  }
+}

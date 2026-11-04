@@ -1,0 +1,28 @@
+{
+  "source_dataset": "backend\\data\\raw\\payment_date_dataset\\dataset.csv",
+  "source_sha256": "139482bdc3325a734474d08f48ceee71ab67c84b106f2a0c0fe9479d71be8431",
+  "processed_at": "2026-11-04T17:40:19.959949+00:00",
+  "stats": {
+    "raw_total_rows": 50000,
+    "duplicate_rows_dropped": 1161,
+    "unique_rows": 48839,
+    "cleared_count": 39158,
+    "open_count": 9681,
+    "late_count": 16418,
+    "on_time_count": 22740,
+    "late_rate": 0.41927575463506817,
+    "avg_late_delay_days": 6.464429284931173,
+    "median_late_delay_days": 2.0,
+    "min_delay_days": -89,
+    "max_delay_days": 204
+  },
+  "target_definitions": {
+    "payment_delay_days": "clear_date - due_date in integer days",
+    "is_late": "1 if payment_delay_days > 0 else 0 (binary classification target)",
+    "late_delay_days": "payment_delay_days strictly for rows where payment_delay_days > 0 (regression target)"
+  },
+  "output_files": {
+    "cleared_invoices": "backend\\ml\\processed\\cleared_invoices.csv",
+    "open_invoices": "backend\\ml\\processed\\open_invoices.csv"
+  }
+}

@@ -48,3 +48,6 @@ data/database/*.sqlite3
 # Keep Development database backup
 !data/database/finora.db
 
+# Raw external ML datasets (do not commit large raw third-party datasets)
+data/raw/payment_date_dataset/
+

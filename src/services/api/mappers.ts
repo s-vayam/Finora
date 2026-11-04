@@ -96,3 +96,4 @@ export function mapBackendPaymentList(payments: PaymentBackend[]): Array<{
     notes: p.notes,
   }));
 }
+

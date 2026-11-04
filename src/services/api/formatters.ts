@@ -75,3 +75,4 @@ export function formatInrLakhs(amount: number | string | null | undefined): stri
   const l = (abs / 100000).toFixed(2);
   return `${sign}₹${l} L`;
 }
+

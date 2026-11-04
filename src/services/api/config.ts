@@ -43,3 +43,4 @@ export const API_ENDPOINTS = {
   fxScenario: `${API_V1_PREFIX}/fx/scenario`,
   fxScenarioHistory: `${API_V1_PREFIX}/fx/scenarios/history`,
 } as const;
+

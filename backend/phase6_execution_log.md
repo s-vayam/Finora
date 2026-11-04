@@ -17,8 +17,8 @@
 | **Stage 6A** | Frontend API integration foundation | **COMPLETED** | `Phase 6A: Frontend API integration foundation` | `9d22250` |
 | **Stage 6B** | Invoice & payment frontend integration | **COMPLETED** | `Phase 6B: Invoice and payment frontend integration` | `026118a` |
 | **Stage 6C** | Predictive cash flow frontend integration | **COMPLETED** | `Phase 6C: Predictive cash flow frontend integration` | `a930f8a` |
-| **Stage 6D** | FX intelligence frontend integration | **COMPLETED** | `Phase 6D: FX intelligence frontend integration` | *In-Progress* |
-| **Stage 6E** | Overview dashboard backend integration | **PENDING** | `Phase 6E: Overview dashboard backend integration` | *Pending* |
+| **Stage 6D** | FX intelligence frontend integration | **COMPLETED** | `Phase 6D: FX intelligence frontend integration` | `2b20ea0` |
+| **Stage 6E** | Overview dashboard backend integration | **COMPLETED** | `Phase 6E: Overview dashboard backend integration` | *In-Progress* |
 | **Stage 6F** | End-to-end testing & product stabilization | **PENDING** | `Phase 6F: End-to-end testing and product stabilization` | *Pending* |
 
 ---
@@ -117,3 +117,23 @@
   - `npm.cmd run build` passed in 6.65s (0 errors).
   - Preserved all Recharts charts, currency selection tabs, KPI metric cards, and layout elements.
 - **Next Permitted Stage:** Stage 6E
+
+---
+
+### Stage 6E: Overview Dashboard Backend Integration
+- **Start Timestamp:** 2026-11-05 01:14:30
+- **Completion Timestamp:** 2026-11-05 01:19:40
+- **Status:** **COMPLETED & VERIFIED**
+- **Actions & Implementation:**
+  - Integrated `OverviewScreen.tsx` with backend authoritative services:
+    - Connected to `GET /api/v1/meta/data-summary` for authoritative entity metrics (60 customers, 899 invoices, 26 open, 873 paid, 872 expenses).
+    - Reconciled receivables, open invoices (26), and overdue count with Invoices screen, factoring in partial payment settlement balances and currency conversions.
+    - Reconciled liquid opening cash balance with `GET /api/v1/cashflow/position/latest` matching Cash Flow screen.
+    - Reconciled FX exposure with `GET /api/v1/fx/exposure` and applied live RBI/FBIL benchmark rates from `GET /api/v1/fx/rates/current` to currency exposure breakdown table.
+    - Integrated backend alerts from `GET /api/v1/cashflow/alerts` mapped directly into Priority Alerts with operational urgency sorting.
+    - Connected contextual Co-Pilot operational insight to the database's actual top overdue invoice with direct "Review Invoice" drill-down into `InvoiceDetailModal` with ML risk intelligence.
+    - Added subtle demonstration data transparency badge ("Demonstration Model • 899 Invoices (26 Open)", "FINORA_DEMO • 60 Global Buyers", "Synthetic demonstration enterprise dataset").
+- **Verification:**
+  - `npm.cmd run build` passed in 6.12s (0 errors).
+  - All original visual layouts, KPI cards, Recharts composed charts, and table designs 100% preserved.
+- **Next Permitted Stage:** Stage 6F

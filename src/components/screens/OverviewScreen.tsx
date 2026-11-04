@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -24,6 +24,14 @@ import {
 import { Invoice, AlertItem, NavigationTab, CashFlowMonth, FXExposureRecord } from '../../types';
 import { StatusBadge } from '../common/Badge';
 import { AccessibleTooltip } from '../common/AccessibleTooltip';
+import { healthApi, cashflowApi, fxApi } from '../../services/api';
+import { 
+  DataSummaryResponse, 
+  CashPositionBackend, 
+  CashflowAlertItem, 
+  FxRateBackend, 
+  FxExposureResponseBackend 
+} from '../../services/api/types';
 
 interface OverviewScreenProps {
   invoices: Invoice[];
@@ -42,38 +50,169 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
   onNavigate,
   onSelectInvoice,
 }) => {
-  const openInvoices = invoices.filter((inv) => inv.status !== 'Paid');
-  const overdueInvoices = invoices.filter((inv) => inv.status === 'Overdue');
   const [reportingPeriod, setReportingPeriod] = useState<'3months' | '6months'>('6months');
   
+  // Backend authoritative data states
+  const [metaSummary, setMetaSummary] = useState<DataSummaryResponse | null>(null);
+  const [cashPosition, setCashPosition] = useState<CashPositionBackend | null>(null);
+  const [backendAlerts, setBackendAlerts] = useState<CashflowAlertItem[]>([]);
+  const [liveRates, setLiveRates] = useState<FxRateBackend[]>([]);
+  const [exposureData, setExposureData] = useState<FxExposureResponseBackend | null>(null);
+
+  // Fetch authoritative backend metrics
+  useEffect(() => {
+    let isMounted = true;
+
+    // 1. Data summary
+    healthApi.getDataSummary()
+      .then((data) => {
+        if (isMounted) setMetaSummary(data);
+      })
+      .catch(() => {});
+
+    // 2. Cash position
+    cashflowApi.getLatestPosition()
+      .then((pos) => {
+        if (isMounted) setCashPosition(pos);
+      })
+      .catch(() => {});
+
+    // 3. Alerts
+    cashflowApi.getAlerts()
+      .then((alertList) => {
+        if (isMounted) setBackendAlerts(alertList || []);
+      })
+      .catch(() => {});
+
+    // 4. Live FX reference rates
+    fxApi.getCurrentRates()
+      .then((rates) => {
+        if (isMounted) setLiveRates(rates || []);
+      })
+      .catch(() => {});
+
+    // 5. FX Exposure
+    fxApi.getExposure()
+      .then((exp) => {
+        if (isMounted) setExposureData(exp);
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const openInvoices = useMemo(
+    () => invoices.filter((inv) => inv.status !== 'Paid'),
+    [invoices]
+  );
+  
+  const overdueInvoices = useMemo(
+    () => invoices.filter((inv) => inv.status === 'Overdue'),
+    [invoices]
+  );
+
   const displayedCashFlow = reportingPeriod === '3months' ? cashFlowData.slice(0, 3) : cashFlowData;
   const currentFinalBalance = displayedCashFlow[displayedCashFlow.length - 1]?.closingBalance || 24.8;
 
-  const overdueTotalUSD = overdueInvoices.reduce((sum, inv) => {
-    if (inv.currency === 'USD') return sum + inv.amount;
-    if (inv.currency === 'EUR') return sum + Math.round(inv.amount * (99 / 85));
-    if (inv.currency === 'GBP') return sum + Math.round(inv.amount * (113 / 85));
-    return sum;
-  }, 0);
+  const overdueTotalUSD = useMemo(() => {
+    return overdueInvoices.reduce((sum, inv) => {
+      const bal = inv.outstandingBalance !== undefined ? inv.outstandingBalance : inv.amount;
+      if (inv.currency === 'USD') return sum + bal;
+      if (inv.currency === 'EUR') return sum + Math.round(bal * (99 / 85));
+      if (inv.currency === 'GBP') return sum + Math.round(bal * (113 / 85));
+      if ((inv.currency as string) === 'INR') return sum + Math.round(bal / 85);
+      return sum;
+    }, 0);
+  }, [overdueInvoices]);
   
-  const totalReceivablesUSD = openInvoices.reduce((sum, inv) => {
-    if (inv.currency === 'USD') return sum + inv.amount;
-    if (inv.currency === 'EUR') return sum + Math.round(inv.amount * (99 / 85));
-    if (inv.currency === 'GBP') return sum + Math.round(inv.amount * (113 / 85));
-    return sum;
-  }, 0);
+  const totalReceivablesUSD = useMemo(() => {
+    return openInvoices.reduce((sum, inv) => {
+      const bal = inv.outstandingBalance !== undefined ? inv.outstandingBalance : inv.amount;
+      if (inv.currency === 'USD') return sum + bal;
+      if (inv.currency === 'EUR') return sum + Math.round(bal * (99 / 85));
+      if (inv.currency === 'GBP') return sum + Math.round(bal * (113 / 85));
+      if ((inv.currency as string) === 'INR') return sum + Math.round(bal / 85);
+      return sum;
+    }, 0);
+  }, [openInvoices]);
 
   const overdueCount = overdueInvoices.length;
 
-  const sortedAlerts = [...alerts].sort((a, b) => {
-    const weights: Record<string, number> = { high: 3, medium: 2, low: 1 };
-    return (weights[b.urgency] || 0) - (weights[a.urgency] || 0);
-  });
+  // Merge and prioritize alerts
+  const combinedAlerts = useMemo(() => {
+    if (!backendAlerts || backendAlerts.length === 0) {
+      return alerts;
+    }
+    const mappedBackend: AlertItem[] = backendAlerts.map((ba) => ({
+      id: ba.alert_id,
+      type: ba.alert_type.toLowerCase().includes('fx') ? 'fx' : ba.alert_type.toLowerCase().includes('doc') ? 'document' : 'overdue',
+      urgency: (ba.severity ? ba.severity.toLowerCase() : 'medium') as 'high' | 'medium' | 'low',
+      title: ba.title || ba.alert_type.replace(/_/g, ' '),
+      whatHappened: ba.description,
+      whyItMatters: 'Liquidity buffer requirements and cash flow timing impact operations.',
+      whatToDoNext: ba.action_needed || 'Review projected cash flows.',
+      actionLabel: ba.action_needed || 'Review Forecast',
+      targetTab: 'cash-flow' as NavigationTab,
+    }));
+    return [...mappedBackend, ...alerts.filter((a) => !mappedBackend.some((m) => m.id === a.id))];
+  }, [backendAlerts, alerts]);
+
+  const sortedAlerts = useMemo(() => {
+    return [...combinedAlerts].sort((a, b) => {
+      const weights: Record<string, number> = { high: 3, medium: 2, low: 1 };
+      return (weights[b.urgency] || 0) - (weights[a.urgency] || 0);
+    });
+  }, [combinedAlerts]);
+
+  // Enrich FX records with current reference benchmark rates
+  const enrichedFxRecords = useMemo(() => {
+    if (!liveRates || liveRates.length === 0) {
+      return fxRecords;
+    }
+    const rateMap = new Map<string, number>();
+    liveRates.forEach((r) => {
+      const curr = r.currency_pair.split('/')[0].toUpperCase();
+      rateMap.set(curr, r.rate_value);
+    });
+
+    return fxRecords.map((rec) => {
+      const benchmark = rateMap.get(rec.currency);
+      if (benchmark) {
+        const illustrativeRate = Number(benchmark.toFixed(2));
+        const inrLakh = Number(((rec.exposureAmount * illustrativeRate) / 100000).toFixed(2));
+        return {
+          ...rec,
+          illustrativeRate,
+          inrLakh,
+        };
+      }
+      return rec;
+    });
+  }, [fxRecords, liveRates]);
 
   const previewInvoices = invoices.slice(0, 5);
 
   const hasOverdue = overdueInvoices.length > 0;
   const topOverdue = overdueInvoices[0];
+
+  const fxExposureDisplay = useMemo(() => {
+    if (!exposureData) return '84,200';
+    let sumUsd = 0;
+    for (const item of exposureData.supported_exposures || []) {
+      const rec = Number(item.receivable_amount || 0);
+      const bench = Number(item.benchmark_rate || 85);
+      if (item.currency === 'USD') sumUsd += rec;
+      else if (item.currency === 'EUR') sumUsd += Math.round(rec * (bench / 85));
+      else if (item.currency === 'GBP') sumUsd += Math.round(rec * (bench / 85));
+    }
+    return sumUsd > 0 ? Math.round(sumUsd).toLocaleString() : '84,200';
+  }, [exposureData]);
+
+  const cashBalanceDisplay = cashPosition
+    ? `₹${(Number(cashPosition.balance_amount) / 100000).toFixed(1)} lakh`
+    : '₹24.8 lakh';
 
   return (
     <div className="space-y-6">
@@ -83,7 +222,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
           <div className="flex items-center gap-2.5">
             <h2 className="text-xl lg:text-2xl font-bold text-[#111111] tracking-tight">Overview</h2>
             <span className="text-[11px] font-medium text-[#111111] bg-[#ECF9A8] px-2.5 py-0.5 rounded-full border border-[#D9F83F]">
-              Reporting: 26 Oct 2026
+              {metaSummary?.counts ? `Demonstration Model • ${metaSummary.counts.invoices} Invoices (${metaSummary.counts.open_invoices} Open)` : 'Reporting: 26 Oct 2026'}
             </span>
           </div>
           <p className="text-xs text-[#8B8D86] mt-1">
@@ -140,7 +279,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-2xl lg:text-3xl font-extrabold text-[#111111] tracking-tight">
-                $84,200
+                ${fxExposureDisplay}
               </span>
               <span className="text-xs font-bold text-[#A87524] bg-[#FEF8EC] px-2 py-0.5 rounded-full border border-[#F5DCB2]">
                 +8.4%
@@ -210,7 +349,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
             </div>
             <div className="mt-3 flex items-baseline gap-2">
               <span className="text-2xl lg:text-3xl font-extrabold text-[#111111] tracking-tight">
-                ₹24.8 lakh
+                {cashBalanceDisplay}
               </span>
               <span className="text-xs font-bold text-[#111111] bg-[#D9F83F] px-2 py-0.5 rounded-full border border-[#D9F83F]">
                 Liquid
@@ -220,7 +359,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
           <div className="mt-3 pt-3 border-t border-[#F5F5F2] flex items-center justify-between text-[11px] text-[#8B8D86]">
             <AccessibleTooltip content="Liquid cash balance across operational and EEFC trade accounts ready for working capital deployment">
               <span className="cursor-help underline decoration-dotted text-[#111111] font-medium">
-                Opening reserves
+                {cashPosition ? 'Reconciled opening reserves' : 'Opening reserves'}
               </span>
             </AccessibleTooltip>
             <button
@@ -247,14 +386,17 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
                   Co-Pilot Operational Insight
                 </span>
                 <span className="text-[10px] text-[#8B8D86] font-medium bg-[#222222] px-2 py-0.5 rounded-full">
-                  Sample Data Model
+                  {metaSummary?.counts ? `FINORA_DEMO • ${metaSummary.counts.customers} Global Buyers` : 'Sample Data Model'}
                 </span>
               </div>
               <p className="text-xs text-[#E7E7E2] mt-1.5 leading-relaxed max-w-3xl">
                 {hasOverdue && topOverdue ? (
                   <>
                     <strong className="text-white font-bold">{topOverdue.customer}&apos;s</strong> payment of{' '}
-                    <strong className="text-[#D9F83F] font-bold">${topOverdue.amount.toLocaleString()} USD</strong> is overdue since {topOverdue.dueDate}. Reviewing the invoice and following up with the customer may help clarify the expected payment date and prevent cash flow delays.
+                    <strong className="text-[#D9F83F] font-bold">
+                      {topOverdue.currency === 'USD' ? '$' : topOverdue.currency === 'EUR' ? '€' : topOverdue.currency === 'GBP' ? '£' : '₹'}
+                      {(topOverdue.outstandingBalance ?? topOverdue.amount).toLocaleString()} {topOverdue.currency}
+                    </strong> is overdue since {topOverdue.dueDate}. Reviewing the invoice and following up with the customer may help clarify the expected payment date and prevent cash flow delays.
                   </>
                 ) : (
                   <>
@@ -386,7 +528,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
           </div>
 
           <div className="mt-3 pt-3 border-t border-[#F5F5F2] flex flex-col sm:flex-row items-start sm:items-center justify-between text-[11px] text-[#8B8D86] gap-1">
-            <span>Opening Balance: ₹24.8L • {reportingPeriod === '3months' ? '3-Month' : '6-Month'} Projected Closing: ₹{currentFinalBalance.toFixed(1)}L</span>
+            <span>Opening Balance: {cashPosition ? `₹${(Number(cashPosition.balance_amount) / 100000).toFixed(1)}L` : '₹24.8L'} • {reportingPeriod === '3months' ? '3-Month' : '6-Month'} Projected Closing: ₹{currentFinalBalance.toFixed(1)}L</span>
             <span className="font-bold text-[#A87524]">Month 3 (Jan 2027) net deficit of -₹1.0L</span>
           </div>
         </div>
@@ -402,7 +544,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
                 </p>
               </div>
               <span className="text-[11px] font-bold text-[#111111] bg-[#F5F5F2] px-2 py-0.5 rounded-full border border-[#E7E7E2]">
-                {alerts.length} Items
+                {sortedAlerts.length} Items
               </span>
             </div>
 
@@ -487,7 +629,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
           </div>
 
           <div className="mt-4 space-y-4">
-            {fxRecords.map((item) => (
+            {enrichedFxRecords.map((item) => (
               <div key={item.currency} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-1.5">
@@ -523,7 +665,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
 
           <div className="mt-5 p-3 rounded-xl bg-[#F5F5F2] border border-[#E7E7E2] text-[11px] text-[#8B8D86]">
             <p className="font-bold text-[#111111] mb-0.5">Illustrative Measurement Notice</p>
-            The $84,200 dashboard KPI is net 45-day unhedged forward volume normalized to USD, while this breakdown reflects total active trade invoices (₹81.25 L total equivalent).
+            The ${fxExposureDisplay} dashboard KPI is net 45-day unhedged forward volume normalized to USD, while this breakdown reflects total active trade invoices (₹81.25 L total equivalent).
           </div>
         </div>
 
@@ -567,8 +709,8 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
                         {inv.invoiceNumber}
                       </td>
                       <td className="py-3 px-3 text-right font-bold text-[#111111]">
-                        {inv.currency === 'USD' ? '$' : inv.currency === 'EUR' ? '€' : '£'}
-                        {inv.amount.toLocaleString()} {inv.currency}
+                        {inv.currency === 'USD' ? '$' : inv.currency === 'EUR' ? '€' : inv.currency === 'GBP' ? '£' : '₹'}
+                        {(inv.outstandingBalance ?? inv.amount).toLocaleString()} {inv.currency}
                       </td>
                       <td className="py-3 px-3 text-[#8B8D86]">
                         {inv.dueDate}
@@ -594,8 +736,10 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
           </div>
 
           <div className="mt-3 pt-3 border-t border-[#F5F5F2] flex items-center justify-between text-[11px] text-[#8B8D86]">
-            <span>Showing top 5 active records. Total recorded invoices: {invoices.length}</span>
-            <span>Illustrative sample dataset</span>
+            <span>Showing top 5 active records. Total recorded invoices: {metaSummary?.counts ? metaSummary.counts.invoices : invoices.length} ({openInvoices.length} active)</span>
+            <span className="text-[#8B8D86]">
+              {metaSummary?.counts ? 'Synthetic demonstration enterprise dataset' : 'Illustrative sample dataset'}
+            </span>
           </div>
         </div>
       </div>

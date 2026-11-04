@@ -297,7 +297,7 @@ export const FXRiskScreen: React.FC<FXRiskScreenProps> = ({ fxRecords: fallbackR
           { pair: 'GBP/INR', curr: 'GBP', symbol: '£', fallbackRate: 127.3 },
         ].map((item) => {
           const liveMatch = liveRates.find((r) => r.currency_pair === item.pair || r.base_currency === item.curr);
-          const rateVal = liveMatch ? liveMatch.rate_value.toFixed(2) : item.fallbackRate.toFixed(2);
+          const rateVal = liveMatch ? Number(liveMatch.rate_value).toFixed(2) : item.fallbackRate.toFixed(2);
           const freshness = liveMatch?.freshness_status || 'FRESH_INDICATIVE';
           const isDerived = liveMatch?.is_derived;
 

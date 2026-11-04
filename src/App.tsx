@@ -21,6 +21,7 @@ import { ToastContainer, ToastMessage } from './components/common/Toast';
 import { ConfirmationModal } from './components/common/ConfirmationModal';
 import { InvoiceDetailModal } from './components/screens/InvoiceDetailModal';
 import { DocumentDetailModal } from './components/screens/DocumentDetailModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 // Screens
 import { OverviewScreen } from './components/screens/OverviewScreen';
@@ -316,54 +317,56 @@ export function App() {
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          {currentTab === 'overview' && (
-            <OverviewScreen
-              invoices={invoices}
-              alerts={alerts}
-              cashFlowData={cashFlowData}
-              fxRecords={FX_EXPOSURE_RECORDS}
-              onNavigate={handleNavigate}
-              onSelectInvoice={(inv) => setSelectedInvoice(inv)}
-            />
-          )}
+          <ErrorBoundary>
+            {currentTab === 'overview' && (
+              <OverviewScreen
+                invoices={invoices}
+                alerts={alerts}
+                cashFlowData={cashFlowData}
+                fxRecords={FX_EXPOSURE_RECORDS}
+                onNavigate={handleNavigate}
+                onSelectInvoice={(inv) => setSelectedInvoice(inv)}
+              />
+            )}
 
-          {currentTab === 'invoices' && (
-            <InvoicesScreen
-              invoices={invoices}
-              onSelectInvoice={(inv) => setSelectedInvoice(inv)}
-              onRequestMarkAsPaid={handleRequestMarkAsPaid}
-              loading={invoicesLoading}
-              error={invoicesError}
-              onRefresh={fetchInvoices}
-            />
-          )}
+            {currentTab === 'invoices' && (
+              <InvoicesScreen
+                invoices={invoices}
+                onSelectInvoice={(inv) => setSelectedInvoice(inv)}
+                onRequestMarkAsPaid={handleRequestMarkAsPaid}
+                loading={invoicesLoading}
+                error={invoicesError}
+                onRefresh={fetchInvoices}
+              />
+            )}
 
-          {currentTab === 'fx-risk' && (
-            <FXRiskScreen fxRecords={FX_EXPOSURE_RECORDS} />
-          )}
+            {currentTab === 'fx-risk' && (
+              <FXRiskScreen fxRecords={FX_EXPOSURE_RECORDS} />
+            )}
 
-          {currentTab === 'cash-flow' && (
-            <CashFlowScreen cashFlowData={cashFlowData} />
-          )}
+            {currentTab === 'cash-flow' && (
+              <CashFlowScreen cashFlowData={cashFlowData} />
+            )}
 
-          {currentTab === 'documents' && (
-            <DocumentsScreen
-              documents={documents}
-              onSelectDocument={(doc) => setSelectedDocument(doc)}
-              onUpdateStatus={handleUpdateDocumentStatus}
-            />
-          )}
+            {currentTab === 'documents' && (
+              <DocumentsScreen
+                documents={documents}
+                onSelectDocument={(doc) => setSelectedDocument(doc)}
+                onUpdateStatus={handleUpdateDocumentStatus}
+              />
+            )}
 
-          {currentTab === 'copilot' && (
-            <CopilotScreen
-              invoices={invoices}
-              documents={documents}
-              cashFlowData={cashFlowData}
-              fxRecords={FX_EXPOSURE_RECORDS}
-              onNavigate={handleNavigate}
-              onSelectInvoice={(inv) => setSelectedInvoice(inv)}
-            />
-          )}
+            {currentTab === 'copilot' && (
+              <CopilotScreen
+                invoices={invoices}
+                documents={documents}
+                cashFlowData={cashFlowData}
+                fxRecords={FX_EXPOSURE_RECORDS}
+                onNavigate={handleNavigate}
+                onSelectInvoice={(inv) => setSelectedInvoice(inv)}
+              />
+            )}
+          </ErrorBoundary>
         </main>
       </div>
 

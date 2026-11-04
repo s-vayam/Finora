@@ -174,12 +174,15 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
     const rateMap = new Map<string, number>();
     liveRates.forEach((r) => {
       const curr = r.currency_pair.split('/')[0].toUpperCase();
-      rateMap.set(curr, r.rate_value);
+      const val = Number(r.rate_value);
+      if (!isNaN(val)) {
+        rateMap.set(curr, val);
+      }
     });
 
     return fxRecords.map((rec) => {
       const benchmark = rateMap.get(rec.currency);
-      if (benchmark) {
+      if (benchmark !== undefined && !isNaN(benchmark)) {
         const illustrativeRate = Number(benchmark.toFixed(2));
         const inrLakh = Number(((rec.exposureAmount * illustrativeRate) / 100000).toFixed(2));
         return {
@@ -196,6 +199,10 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
 
   const hasOverdue = overdueInvoices.length > 0;
   const topOverdue = overdueInvoices[0];
+
+  const totalInvoicesCount = (metaSummary as any)?.total_invoices || metaSummary?.counts?.invoices || invoices.length;
+  const totalOpenCount = (metaSummary as any)?.total_open_invoices || metaSummary?.counts?.open_invoices || openInvoices.length;
+  const totalBuyersCount = (metaSummary as any)?.total_customers || metaSummary?.counts?.customers || 60;
 
   const fxExposureDisplay = useMemo(() => {
     if (!exposureData) return '84,200';
@@ -222,7 +229,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
           <div className="flex items-center gap-2.5">
             <h2 className="text-xl lg:text-2xl font-bold text-[#111111] tracking-tight">Overview</h2>
             <span className="text-[11px] font-medium text-[#111111] bg-[#ECF9A8] px-2.5 py-0.5 rounded-full border border-[#D9F83F]">
-              {metaSummary?.counts ? `Demonstration Model • ${metaSummary.counts.invoices} Invoices (${metaSummary.counts.open_invoices} Open)` : 'Reporting: 26 Oct 2026'}
+              {metaSummary ? `Demonstration Model • ${totalInvoicesCount} Invoices (${totalOpenCount} Open)` : 'Reporting: 26 Oct 2026'}
             </span>
           </div>
           <p className="text-xs text-[#8B8D86] mt-1">
@@ -386,7 +393,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
                   Co-Pilot Operational Insight
                 </span>
                 <span className="text-[10px] text-[#8B8D86] font-medium bg-[#222222] px-2 py-0.5 rounded-full">
-                  {metaSummary?.counts ? `FINORA_DEMO • ${metaSummary.counts.customers} Global Buyers` : 'Sample Data Model'}
+                  {metaSummary ? `FINORA_DEMO • ${totalBuyersCount} Global Buyers` : 'Sample Data Model'}
                 </span>
               </div>
               <p className="text-xs text-[#E7E7E2] mt-1.5 leading-relaxed max-w-3xl">
@@ -736,9 +743,9 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
           </div>
 
           <div className="mt-3 pt-3 border-t border-[#F5F5F2] flex items-center justify-between text-[11px] text-[#8B8D86]">
-            <span>Showing top 5 active records. Total recorded invoices: {metaSummary?.counts ? metaSummary.counts.invoices : invoices.length} ({openInvoices.length} active)</span>
+            <span>Showing top 5 active records. Total recorded invoices: {totalInvoicesCount} ({openInvoices.length} active)</span>
             <span className="text-[#8B8D86]">
-              {metaSummary?.counts ? 'Synthetic demonstration enterprise dataset' : 'Illustrative sample dataset'}
+              {metaSummary ? 'Synthetic demonstration enterprise dataset' : 'Illustrative sample dataset'}
             </span>
           </div>
         </div>

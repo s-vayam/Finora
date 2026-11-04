@@ -19,9 +19,11 @@ export function mapBackendInvoiceToUi(inv: InvoiceBackend): Invoice {
   const inrEquivalent = inv.inr_equivalent ? Number(inv.inr_equivalent) : Math.round(amount * rate);
 
   const amountPaid = Number(inv.amount_paid || 0);
-  const outstandingBalance = inv.outstanding_balance !== undefined
-    ? Number(inv.outstanding_balance)
-    : Math.max(0, amount - amountPaid);
+  const outstandingBalance = (inv as any).outstanding_amount !== undefined
+    ? Number((inv as any).outstanding_amount)
+    : (inv.outstanding_balance !== undefined
+      ? Number(inv.outstanding_balance)
+      : Math.max(0, amount - amountPaid));
 
   // Map status
   let uiStatus: InvoiceStatus = 'Upcoming';
@@ -56,20 +58,23 @@ export function mapBackendInvoiceToUi(inv: InvoiceBackend): Invoice {
 
   const terms = inv.payment_terms_days ? `Net ${inv.payment_terms_days}` : 'Net 30';
 
+  const invoiceNum = inv.invoice_number || inv.invoice_id || 'INV-0000';
+  const issueDt = inv.issue_date || (inv as any).invoice_date || new Date().toISOString().split('T')[0];
+
   return {
     id: inv.invoice_id,
-    invoiceNumber: inv.invoice_number,
-    customer: inv.customer_name || `Customer ${inv.customer_id.substring(0, 8)}`,
+    invoiceNumber: invoiceNum,
+    customer: inv.customer_name || (inv.customer_id ? `Customer ${inv.customer_id.substring(0, 8)}` : 'Trade Buyer'),
     country: inv.customer_country || 'United States',
     currency,
     amount,
     inrEquivalent,
-    issueDate: inv.issue_date,
+    issueDate: issueDt,
     dueDate: inv.due_date,
     status: uiStatus,
     paymentTerms: terms,
     description: inv.description || 'Export commercial shipment',
-    shippingReference: inv.shipping_reference || `EXP-${inv.invoice_number}`,
+    shippingReference: inv.shipping_reference || `EXP-${invoiceNum}`,
     contactEmail: inv.contact_email || 'finance@buyer-intl.com',
     amountPaid,
     outstandingBalance,

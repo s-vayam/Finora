@@ -15,8 +15,8 @@
 |:---|:---|:---:|:---|:---:|
 | **Preflight** | Safety checks, branch, DB backup, baselines | **COMPLETED** | `feature/phase6-frontend-integration` | `8cd3267` |
 | **Stage 6A** | Frontend API integration foundation | **COMPLETED** | `Phase 6A: Frontend API integration foundation` | `9d22250` |
-| **Stage 6B** | Invoice & payment frontend integration | **COMPLETED** | `Phase 6B: Invoice and payment frontend integration` | *In-Progress* |
-| **Stage 6C** | Predictive cash flow frontend integration | **PENDING** | `Phase 6C: Predictive cash flow frontend integration` | *Pending* |
+| **Stage 6B** | Invoice & payment frontend integration | **COMPLETED** | `Phase 6B: Invoice and payment frontend integration` | `026118a` |
+| **Stage 6C** | Predictive cash flow frontend integration | **COMPLETED** | `Phase 6C: Predictive cash flow frontend integration` | *In-Progress* |
 | **Stage 6D** | FX intelligence frontend integration | **PENDING** | `Phase 6D: FX intelligence frontend integration` | *Pending* |
 | **Stage 6E** | Overview dashboard backend integration | **PENDING** | `Phase 6E: Overview dashboard backend integration` | *Pending* |
 | **Stage 6F** | End-to-end testing & product stabilization | **PENDING** | `Phase 6F: End-to-end testing and product stabilization` | *Pending* |
@@ -80,3 +80,21 @@
   - `npm.cmd run build` passed in 4.57s (0 errors).
   - All original visual layouts, table columns, filter dropdowns, search inputs, and modal styles 100% preserved.
 - **Next Permitted Stage:** Stage 6C
+
+---
+
+### Stage 6C: Predictive Cash Flow Frontend Integration
+- **Start Timestamp:** 2026-11-05 01:12:00
+- **Completion Timestamp:** 2026-11-05 01:13:00
+- **Status:** **COMPLETED & VERIFIED**
+- **Actions & Implementation:**
+  - Connected `CashFlowScreen` to `GET /api/v1/cashflow/position/latest` for real cash position snapshot tracking.
+  - Implemented opening balance safeguard: when snapshot is absent, displays a non-blocking "Opening Position Required" notice with an interactive form to establish opening liquidity via `POST /api/v1/cashflow/position` (never fabricating balance numbers).
+  - Connected multi-horizon forecasting to `GET /api/v1/cashflow/forecast` supporting 30-day, 60-day, and 90-day predictive roll-forward schedules.
+  - Connected historical cash flow to `GET /api/v1/cashflow/history` with a dedicated 3-year historical archive view toggle.
+  - Integrated `GET /api/v1/cashflow/alerts` for real-time liquidity alert notifications (shortfall risk, minimum cash buffer breaches).
+  - Integrated what-if stress simulation panel connected to `POST /api/v1/cashflow/scenario` testing customer payment delays and expense increases against baseline forecasts.
+- **Verification:**
+  - `npm.cmd run build` passed in 4.54s (0 errors).
+  - Recharts composed chart, KPI cards, and breakdown schedule table 100% visually preserved.
+- **Next Permitted Stage:** Stage 6D

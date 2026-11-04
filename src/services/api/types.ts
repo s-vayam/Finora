@@ -157,6 +157,13 @@ export interface CashPositionCreateRequest {
   notes?: string;
 }
 
+export interface CashPositionUpdateRequest {
+  balance_amount?: number | string;
+  minimum_cash_threshold?: number | string;
+  as_of_date?: string;
+  notes?: string;
+}
+
 export interface MonthlyCashflowBackend {
   id: number;
   company_id: string;
@@ -170,30 +177,53 @@ export interface MonthlyCashflowBackend {
   is_historical: boolean;
 }
 
+export interface ForecastSummaryBackend {
+  opening_balance: string | number;
+  expected_inflows: string | number;
+  expected_outflows: string | number;
+  net_cash_flow: string | number;
+  closing_balance: string | number;
+  minimum_projected_balance: string | number;
+  minimum_balance_date?: string;
+  days_below_threshold?: number;
+  days_negative_balance?: number;
+}
+
 export interface DailyProjectionItem {
   date: string;
-  inflow: number;
-  outflow: number;
-  net: number;
-  closing_balance: number;
-  minimum_threshold: number;
-  is_breach: boolean;
+  opening_balance?: number | string;
+  expected_inflows?: number | string;
+  expected_outflows?: number | string;
+  net_cash_flow?: number | string;
+  closing_balance: number | string;
+  projected_liquidity_status?: string;
+  inflow?: number;
+  outflow?: number;
+  net?: number;
+  minimum_threshold?: number;
+  is_breach?: boolean;
 }
 
 export interface CashflowForecastResponse {
-  forecast_run_id: string;
+  forecast_id?: string;
+  forecast_run_id?: string;
   company_id: string;
   as_of_date: string;
-  horizon_days: number;
-  opening_balance: number;
-  total_inflow: number;
-  total_outflow: number;
-  net_cash_flow: number;
-  closing_balance: number;
-  minimum_projected_balance: number;
-  minimum_projected_date: string;
-  has_liquidity_breach: boolean;
-  daily_projections: DailyProjectionItem[];
+  horizon_days?: number;
+  forecast_horizon_days?: number;
+  opening_balance: number | string;
+  total_inflow?: number;
+  total_outflow?: number;
+  net_cash_flow?: number;
+  closing_balance?: number;
+  summary?: ForecastSummaryBackend;
+  daily_projection?: DailyProjectionItem[];
+  daily_projections?: DailyProjectionItem[];
+  monthly_projection?: any[];
+  alerts?: CashflowAlertItem[];
+  minimum_projected_balance?: number;
+  minimum_projected_date?: string;
+  has_liquidity_breach?: boolean;
   model_version?: string;
   generated_at?: string;
 }
@@ -201,28 +231,50 @@ export interface CashflowForecastResponse {
 export interface CashflowAlertItem {
   alert_id: string;
   alert_type: string;
-  severity: 'HIGH' | 'MEDIUM' | 'LOW';
-  title: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW' | 'CRITICAL' | 'WARNING' | 'INFO';
+  title?: string;
   description: string;
   action_needed?: string;
+  recommended_action?: string;
   projected_date?: string;
+  related_date?: string;
   shortfall_amount?: number;
+  relevant_amount?: number | string;
 }
 
 export interface CashflowScenarioRequest {
   company_id?: string;
   as_of_date?: string;
   horizon_days?: number;
+  payment_delay_days?: number;
+  expense_increase_percentage?: number;
   customer_delay_days?: number;
   expense_increase_percent?: number;
   collection_haircut_percent?: number;
 }
 
 export interface CashflowScenarioResponse {
-  baseline: CashflowForecastResponse;
-  scenario: CashflowForecastResponse;
-  difference_in_closing_balance: number;
-  liquidity_pressure: string;
+  baseline_forecast_id?: string;
+  scenario_forecast_id?: string;
+  company_id?: string;
+  as_of_date?: string;
+  horizon_days?: number;
+  simulation_parameters?: Record<string, any>;
+  baseline_ending_cash?: number | string;
+  scenario_ending_cash?: number | string;
+  net_cash_difference?: number | string;
+  baseline_minimum_balance?: number | string;
+  scenario_minimum_balance?: number | string;
+  baseline_shortage_date?: string | null;
+  scenario_shortage_date?: string | null;
+  additional_liquidity_pressure?: number | string;
+  collections_delayed_outside_horizon?: number | string;
+  explanation?: string;
+  status?: string;
+  baseline?: Partial<CashflowForecastResponse> & { closing_balance?: number | string; total_inflow?: number | string; total_outflow?: number | string };
+  scenario?: Partial<CashflowForecastResponse> & { closing_balance?: number | string; total_inflow?: number | string; total_outflow?: number | string };
+  difference_in_closing_balance?: number;
+  liquidity_pressure?: string;
 }
 
 export interface ExpenseAssumptionBackend {

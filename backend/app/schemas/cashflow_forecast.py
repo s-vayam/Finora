@@ -38,6 +38,13 @@ class CashBalanceSnapshotCreate(BaseModel):
     notes: Optional[str] = Field(None, max_length=500, description="Descriptive notes or audit context")
 
 
+class CashBalanceSnapshotUpdate(BaseModel):
+    balance_amount: Optional[Decimal] = Field(None, gt=0, description="Updated balance amount in base currency")
+    minimum_cash_threshold: Optional[Decimal] = Field(None, ge=0, description="Updated minimum cash reserve")
+    as_of_date: Optional[date] = Field(None, description="Updated effective date for snapshot")
+    notes: Optional[str] = Field(None, max_length=500, description="Audit reason or context for modification")
+
+
 class CashBalanceSnapshotResponse(BaseModel):
     snapshot_id: str
     company_id: str
@@ -144,6 +151,10 @@ class DailyCashflowProjection(BaseModel):
     net_cash_flow: Decimal
     closing_balance: Decimal
     projected_liquidity_status: str = Field("HEALTHY", description="HEALTHY, CAUTION, or DEFICIT")
+    # Convenience aliases for frontend Recharts compatibility
+    inflow: Optional[Decimal] = None
+    outflow: Optional[Decimal] = None
+    net: Optional[Decimal] = None
 
 
 class MonthlyCashflowProjection(BaseModel):
@@ -190,6 +201,12 @@ class CashflowForecastResponse(BaseModel):
     daily_projection: List[DailyCashflowProjection] = Field(default_factory=list)
     unresolved_overdue_receivables: List[Dict[str, Any]] = Field(default_factory=list)
     foreign_currency_exposures: List[Dict[str, Any]] = Field(default_factory=list)
+    # Convenience top-level aliases for frontend backward compatibility
+    total_inflow: Optional[Decimal] = None
+    total_outflow: Optional[Decimal] = None
+    net_cash_flow: Optional[Decimal] = None
+    closing_balance: Optional[Decimal] = None
+    daily_projections: Optional[List[DailyCashflowProjection]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -207,12 +224,15 @@ class ForecastGenerateRequest(BaseModel):
 
 class WhatIfScenarioRequest(BaseModel):
     company_id: str = Field("FINORA_DEMO", description="Company ID")
-    as_of_date: date = Field(..., description="As-of reference date")
+    as_of_date: Optional[date] = Field(None, description="As-of reference date (defaults to latest snapshot date or today)")
     horizon_days: int = Field(90, description="Horizon days (30, 60, or 90)")
     payment_delay_days: int = Field(0, ge=0, le=90, description="Additional payment delay in days")
     expense_increase_percentage: Decimal = Field(
         Decimal("0.00"), ge=0, le=100, description="Percentage increase on projected expenses"
     )
+    # Frontend aliases for seamless compatibility
+    customer_delay_days: Optional[int] = Field(None, ge=0, le=90, description="Alias for payment_delay_days")
+    expense_increase_percent: Optional[Decimal] = Field(None, ge=0, le=100, description="Alias for expense_increase_percentage")
 
 
 class ScenarioComparisonResponse(BaseModel):
@@ -233,4 +253,9 @@ class ScenarioComparisonResponse(BaseModel):
     collections_delayed_outside_horizon: Decimal
     explanation: str
     status: str = "SIMULATED"
+    # Backward compatibility aliases for frontend
+    difference_in_closing_balance: Optional[Decimal] = None
+    liquidity_pressure: Optional[str] = None
+    baseline: Optional[Dict[str, Any]] = None
+    scenario: Optional[Dict[str, Any]] = None
 

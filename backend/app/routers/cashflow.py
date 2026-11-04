@@ -19,6 +19,7 @@ from app.models.cashflow_forecast_run import CashflowForecastRun
 from app.schemas.cashflow import MonthlyCashflowResponse
 from app.schemas.cashflow_forecast import (
     CashBalanceSnapshotCreate,
+    CashBalanceSnapshotUpdate,
     CashBalanceSnapshotResponse,
     CollectionOverrideCreate,
     CollectionOverrideResponse,
@@ -33,6 +34,7 @@ from app.schemas.cashflow_forecast import (
 )
 from app.services.cashflow_data_service import (
     record_cash_position,
+    update_cash_position,
     get_latest_cash_position,
     create_collection_override,
     list_collection_overrides,
@@ -82,6 +84,20 @@ def record_cash_balance_position(
     """Record an opening cash balance snapshot for a company and effective date."""
     snapshot = record_cash_position(db, payload)
     return snapshot
+
+
+@router.patch(
+    "/position/{snapshot_id}",
+    response_model=CashBalanceSnapshotResponse,
+    summary="Update opening cash balance snapshot",
+)
+def update_cash_balance_position(
+    snapshot_id: str,
+    payload: CashBalanceSnapshotUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update an existing cash balance snapshot with audit tracking."""
+    return update_cash_position(db, snapshot_id, payload)
 
 
 @router.get(
@@ -309,13 +325,26 @@ def simulate_what_if_scenario(
     Simulate financial impact of customer payment delays and expense increases.
     Compares simulated cash trajectory against baseline forecast.
     """
+    ref_date = payload.as_of_date
+    if not ref_date:
+        latest_pos = get_latest_cash_position(db, company_id=payload.company_id)
+        ref_date = latest_pos.as_of_date if latest_pos else date.today()
+
+    delay_days = payload.payment_delay_days
+    if payload.customer_delay_days is not None and delay_days == 0:
+        delay_days = payload.customer_delay_days
+
+    expense_pct = payload.expense_increase_percentage
+    if payload.expense_increase_percent is not None and expense_pct == Decimal("0.00"):
+        expense_pct = payload.expense_increase_percent
+
     comparison = run_what_if_scenario(
         db,
         company_id=payload.company_id,
-        as_of_date=payload.as_of_date,
+        as_of_date=ref_date,
         horizon_days=payload.horizon_days,
-        payment_delay_days=payload.payment_delay_days,
-        expense_increase_percentage=payload.expense_increase_percentage,
+        payment_delay_days=delay_days,
+        expense_increase_percentage=expense_pct,
     )
     return comparison
 

@@ -18,6 +18,7 @@ import {
   PaymentRiskStatusResponse,
   CashPositionBackend,
   CashPositionCreateRequest,
+  CashPositionUpdateRequest,
   MonthlyCashflowBackend,
   CashflowForecastResponse,
   CashflowAlertItem,
@@ -175,6 +176,17 @@ export const cashflowApi = {
       { signal }
     ),
 
+  updatePosition: (
+    snapshotId: string,
+    data: CashPositionUpdateRequest,
+    signal?: AbortSignal
+  ) =>
+    apiClient.patch<CashPositionBackend>(
+      `${API_ENDPOINTS.cashflowPosition}/${snapshotId}`,
+      data,
+      { signal }
+    ),
+
   getForecast: (
     options?: { horizon_days?: number; as_of_date?: string; company_id?: string },
     signal?: AbortSignal
@@ -200,12 +212,23 @@ export const cashflowApi = {
       signal,
     }),
 
-  runScenario: (data: CashflowScenarioRequest, signal?: AbortSignal) =>
-    apiClient.post<CashflowScenarioResponse>(
+  runScenario: (data: CashflowScenarioRequest, signal?: AbortSignal) => {
+    const delay = data.payment_delay_days ?? data.customer_delay_days ?? 0;
+    const expensePct = data.expense_increase_percentage ?? data.expense_increase_percent ?? 0;
+    return apiClient.post<CashflowScenarioResponse>(
       API_ENDPOINTS.cashflowScenario,
-      { company_id: DEFAULT_COMPANY_ID, ...data },
+      {
+        company_id: data.company_id || DEFAULT_COMPANY_ID,
+        as_of_date: data.as_of_date,
+        horizon_days: data.horizon_days || 30,
+        payment_delay_days: delay,
+        expense_increase_percentage: expensePct,
+        customer_delay_days: delay,
+        expense_increase_percent: expensePct,
+      },
       { signal }
-    ),
+    );
+  },
 
   getExpenseAssumptions: (companyId = DEFAULT_COMPANY_ID, signal?: AbortSignal) =>
     apiClient.get<ExpenseAssumptionBackend[]>(API_ENDPOINTS.cashflowAssumptions, {

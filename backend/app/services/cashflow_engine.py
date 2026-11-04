@@ -195,6 +195,9 @@ def generate_cashflow_forecast(
             "net_cash_flow": net,
             "closing_balance": closing,
             "projected_liquidity_status": status_str,
+            "inflow": d_in,
+            "outflow": d_out,
+            "net": net,
         })
 
         running_opening = closing
@@ -373,12 +376,17 @@ def generate_cashflow_forecast(
         "base_currency": base_currency,
         "forecast_horizon_days": horizon_days,
         "opening_balance": opening_balance,
+        "total_inflow": cumulative_inflows,
+        "total_outflow": cumulative_outflows,
+        "net_cash_flow": net_cf,
+        "closing_balance": final_closing,
         "forecast_reliability": reliability.value,
         "data_freshness": data_freshness_dict,
         "summary": summary_data,
         "alerts": alerts,
         "monthly_projection": monthly_projections,
         "daily_projection": daily_projections,
+        "daily_projections": daily_projections,
         "unresolved_overdue_receivables": inflows_res["unresolved_overdue"],
         "foreign_currency_exposures": inflows_res["foreign_currency_exposures"],
         "simulation_metadata": {
@@ -502,5 +510,19 @@ def run_what_if_scenario(
         "collections_delayed_outside_horizon": delayed_outside,
         "explanation": explanation,
         "status": "SIMULATED",
+        "difference_in_closing_balance": diff,
+        "liquidity_pressure": f"{-liquidity_pressure:.2f} INR" if liquidity_pressure > 0 else "0.00 INR",
+        "baseline": {
+            "closing_balance": base_end,
+            "total_inflow": baseline["summary"]["expected_inflows"],
+            "total_outflow": baseline["summary"]["expected_outflows"],
+            "minimum_projected_balance": base_min,
+        },
+        "scenario": {
+            "closing_balance": scen_end,
+            "total_inflow": scenario["summary"]["expected_inflows"],
+            "total_outflow": scenario["summary"]["expected_outflows"],
+            "minimum_projected_balance": scen_min,
+        },
     }
 

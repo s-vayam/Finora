@@ -9,7 +9,9 @@ import {
   Calendar,
   CheckCircle2,
   TrendingDown,
-  Info
+  Info,
+  Edit2,
+  X
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -62,6 +64,16 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
   const [newAsOfDate, setNewAsOfDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [createPositionLoading, setCreatePositionLoading] = useState(false);
   const [createPositionError, setCreatePositionError] = useState<string | null>(null);
+
+  // Edit Opening Position Form state
+  const [showEditPosition, setShowEditPosition] = useState(false);
+  const [editBalance, setEditBalance] = useState('');
+  const [editThreshold, setEditThreshold] = useState('');
+  const [editAsOfDate, setEditAsOfDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editPositionLoading, setEditPositionLoading] = useState(false);
+  const [editPositionError, setEditPositionError] = useState<string | null>(null);
+  const [editPositionSuccess, setEditPositionSuccess] = useState<string | null>(null);
 
   // Loading & error states
   const [loading, setLoading] = useState(true);
@@ -152,13 +164,59 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
     }
   };
 
+  // Open edit position form
+  const handleOpenEditPosition = () => {
+    if (!position) return;
+    setEditBalance(String(position.balance_amount));
+    setEditThreshold(String(position.minimum_cash_threshold ?? '500000'));
+    setEditAsOfDate(position.as_of_date);
+    setEditNotes('');
+    setEditPositionError(null);
+    setEditPositionSuccess(null);
+    setShowEditPosition(true);
+  };
+
+  // Update existing opening cash position
+  const handleUpdatePosition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!position) return;
+    setEditPositionLoading(true);
+    setEditPositionError(null);
+    setEditPositionSuccess(null);
+    try {
+      const updated = await cashflowApi.updatePosition(position.snapshot_id, {
+        balance_amount: parseFloat(editBalance),
+        minimum_cash_threshold: parseFloat(editThreshold),
+        as_of_date: editAsOfDate,
+        notes: editNotes.trim() ? editNotes.trim() : undefined,
+      });
+      setPosition(updated);
+      setEditPositionSuccess('Opening cash position updated successfully.');
+      setTimeout(() => {
+        setShowEditPosition(false);
+        setEditPositionSuccess(null);
+      }, 1200);
+
+      // Immediately refresh forecast with the updated position
+      const fc = await cashflowApi.getForecast({ horizon_days: horizonDays });
+      setForecast(fc);
+    } catch (err: any) {
+      setEditPositionError(err?.message || 'Could not update opening cash balance.');
+    } finally {
+      setEditPositionLoading(false);
+    }
+  };
+
   // Run scenario simulation
   const handleRunScenario = async () => {
     if (!position) return;
     setScenarioLoading(true);
     try {
       const res = await cashflowApi.runScenario({
+        as_of_date: position.as_of_date,
         horizon_days: horizonDays,
+        payment_delay_days: delayDays,
+        expense_increase_percentage: expenseIncreasePct,
         customer_delay_days: delayDays,
         expense_increase_percent: expenseIncreasePct,
       });
@@ -187,26 +245,33 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
       }));
     }
 
-    if (forecast && forecast.daily_projections && forecast.daily_projections.length > 0) {
+    const days = forecast?.daily_projection || forecast?.daily_projections;
+    if (forecast && days && days.length > 0) {
       // Aggregate into 10-day buckets for clean Recharts display
-      const days = forecast.daily_projections;
       const bucketSize = horizonDays === 30 ? 6 : horizonDays === 60 ? 10 : 15;
       const buckets: any[] = [];
 
       for (let i = 0; i < days.length; i += bucketSize) {
         const slice = days.slice(i, i + bucketSize);
         const lastDay = slice[slice.length - 1];
-        const sumIn = slice.reduce((sum, d) => sum + d.inflow, 0);
-        const sumOut = slice.reduce((sum, d) => sum + d.outflow, 0);
+        const sumIn = slice.reduce((sum, d) => {
+          const val = Number(d.expected_inflows ?? d.inflow ?? 0);
+          return sum + (isNaN(val) ? 0 : val);
+        }, 0);
+        const sumOut = slice.reduce((sum, d) => {
+          const val = Number(d.expected_outflows ?? d.outflow ?? 0);
+          return sum + (isNaN(val) ? 0 : val);
+        }, 0);
         const startDayStr = slice[0].date.split('-').slice(1).join('/');
         const endDayStr = lastDay.date.split('-').slice(1).join('/');
+        const closingNum = Number(lastDay.closing_balance ?? 0);
 
         buckets.push({
           label: `${slice[0].date} to ${lastDay.date}`,
           shortLabel: `${startDayStr}–${endDayStr}`,
           inflows: Number((sumIn / 100000).toFixed(1)),
           outflows: Number((sumOut / 100000).toFixed(1)),
-          closingBalance: Number((lastDay.closing_balance / 100000).toFixed(1)),
+          closingBalance: Number((closingNum / 100000).toFixed(1)),
           netChange: Number(((sumIn - sumOut) / 100000).toFixed(1)),
           notes: `Projected receipts and payables for ${slice.length} sessions`,
         });
@@ -218,21 +283,28 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
     return fallbackData.slice(0, horizonDays === 30 ? 3 : 6);
   }, [viewMode, historical, forecast, horizonDays, fallbackData]);
 
-  // KPI Calculations
+  // KPI Calculations (Safely handling both nested summary and top-level fields to prevent NaN)
   const openingLakh = position
     ? Number((Number(position.balance_amount) / 100000).toFixed(1))
+    : forecast?.summary?.opening_balance != null
+    ? Number((Number(forecast.summary.opening_balance) / 100000).toFixed(1))
+    : forecast?.opening_balance != null
+    ? Number((Number(forecast.opening_balance) / 100000).toFixed(1))
     : 25.0;
 
-  const totalInflowsLakh = forecast
-    ? Number((forecast.total_inflow / 100000).toFixed(1))
-    : chartData.reduce((acc, d) => acc + d.inflows, 0);
+  const rawInflow = forecast?.summary?.expected_inflows ?? forecast?.total_inflow;
+  const totalInflowsLakh = rawInflow != null
+    ? Number((Number(rawInflow) / 100000).toFixed(1))
+    : chartData.reduce((acc, d) => acc + (d.inflows || 0), 0);
 
-  const totalOutflowsLakh = forecast
-    ? Number((forecast.total_outflow / 100000).toFixed(1))
-    : chartData.reduce((acc, d) => acc + d.outflows, 0);
+  const rawOutflow = forecast?.summary?.expected_outflows ?? forecast?.total_outflow;
+  const totalOutflowsLakh = rawOutflow != null
+    ? Number((Number(rawOutflow) / 100000).toFixed(1))
+    : chartData.reduce((acc, d) => acc + (d.outflows || 0), 0);
 
-  const closingBalanceLakh = forecast
-    ? Number((forecast.closing_balance / 100000).toFixed(1))
+  const rawClosing = forecast?.summary?.closing_balance ?? forecast?.closing_balance;
+  const closingBalanceLakh = rawClosing != null
+    ? Number((Number(rawClosing) / 100000).toFixed(1))
     : (chartData[chartData.length - 1]?.closingBalance || openingLakh);
 
   const totalNetLakh = Number((totalInflowsLakh - totalOutflowsLakh).toFixed(1));
@@ -457,42 +529,167 @@ export const CashFlowScreen: React.FC<CashFlowScreenProps> = ({ cashFlowData: fa
             </div>
           </div>
 
-          {scenarioResult && (
-            <div className="mt-4 p-4 rounded-xl bg-[#F5F5F2] border border-[#E7E7E2] grid grid-cols-1 sm:grid-cols-4 gap-3 text-center">
-              <div>
-                <span className="text-[10px] text-[#8B8D86] block">Baseline Closing</span>
-                <span className="text-base font-bold text-[#111111]">
-                  ₹{(scenarioResult.baseline.closing_balance / 100000).toFixed(2)} L
-                </span>
+          {scenarioResult && (() => {
+            const baselineEnding = Number(scenarioResult.baseline_ending_cash ?? scenarioResult.baseline?.closing_balance ?? 0);
+            const scenarioEnding = Number(scenarioResult.scenario_ending_cash ?? scenarioResult.scenario?.closing_balance ?? 0);
+            const netDiff = Number(scenarioResult.net_cash_difference ?? scenarioResult.difference_in_closing_balance ?? (scenarioEnding - baselineEnding));
+            const pressureText = scenarioResult.explanation ?? scenarioResult.liquidity_pressure ?? (netDiff < 0 ? `-${(Math.abs(netDiff) / 100000).toFixed(2)} L` : 'Neutral');
+
+            return (
+              <div className="mt-4 p-4 rounded-xl bg-[#F5F5F2] border border-[#E7E7E2] grid grid-cols-1 sm:grid-cols-4 gap-3 text-center">
+                <div>
+                  <span className="text-[10px] text-[#8B8D86] block">Baseline Closing</span>
+                  <span className="text-base font-bold text-[#111111]">
+                    ₹{(baselineEnding / 100000).toFixed(2)} L
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#8B8D86] block">Stressed Closing</span>
+                  <span className="text-base font-bold text-[#B94A48]">
+                    ₹{(scenarioEnding / 100000).toFixed(2)} L
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#8B8D86] block">Liquidity Variance</span>
+                  <span className="text-base font-bold text-[#B94A48]">
+                    {netDiff < 0 ? '-' : '+'}₹{(Math.abs(netDiff) / 100000).toFixed(2)} L
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-[#8B8D86] block">Liquidity Pressure</span>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full inline-block mt-1 bg-white border border-[#E7E7E2] text-[#111111] truncate max-w-full" title={String(pressureText)}>
+                    {scenarioResult.liquidity_pressure || (netDiff < 0 ? `Stress: -₹${(Math.abs(netDiff) / 100000).toFixed(1)}L` : 'Stable')}
+                  </span>
+                </div>
               </div>
-              <div>
-                <span className="text-[10px] text-[#8B8D86] block">Stressed Closing</span>
-                <span className="text-base font-bold text-[#B94A48]">
-                  ₹{(scenarioResult.scenario.closing_balance / 100000).toFixed(2)} L
-                </span>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Edit Opening Position Form Modal / Panel */}
+      {showEditPosition && position && (
+        <div className="p-5 rounded-xl bg-white border border-[#244E3D] shadow-sm text-xs space-y-3">
+          <div className="flex items-start justify-between pb-3 border-b border-[#E7E7E2]">
+            <div>
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-[#244E3D]" />
+                <h4 className="font-bold text-sm text-[#111111]">Edit Opening Cash Position</h4>
               </div>
-              <div>
-                <span className="text-[10px] text-[#8B8D86] block">Liquidity Variance</span>
-                <span className="text-base font-bold text-[#B94A48]">
-                  -₹{(Math.abs(scenarioResult.difference_in_closing_balance) / 100000).toFixed(2)} L
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-[#8B8D86] block">Liquidity Pressure</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full inline-block mt-1 bg-white border border-[#E7E7E2] text-[#111111]">
-                  {scenarioResult.liquidity_pressure}
-                </span>
+              <p className="text-[11px] text-[#8B8D86] mt-0.5">
+                Snapshot ID: <span className="font-mono text-neutral-700">{position.snapshot_id}</span> • Modifying this position recalculates downstream rolling forecasts.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowEditPosition(false);
+                setEditPositionError(null);
+                setEditPositionSuccess(null);
+              }}
+              className="p-1 text-[#8B8D86] hover:text-[#111111] rounded hover:bg-[#F5F5F2] cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <form onSubmit={handleUpdatePosition} className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <div>
+              <label className="text-[10px] font-bold text-neutral-700 block mb-1">Opening Balance (₹ INR)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={editBalance}
+                onChange={(e) => setEditBalance(e.target.value)}
+                className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs font-mono"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-neutral-700 block mb-1">Min Threshold (₹ INR)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={editThreshold}
+                onChange={(e) => setEditThreshold(e.target.value)}
+                className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs font-mono"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-neutral-700 block mb-1">As Of Date</label>
+              <input
+                type="date"
+                value={editAsOfDate}
+                onChange={(e) => setEditAsOfDate(e.target.value)}
+                className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs"
+                required
+              />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={editPositionLoading}
+                  className="flex-1 p-2 bg-[#244E3D] hover:bg-[#1C3E30] text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-1"
+                >
+                  {editPositionLoading ? 'Updating...' : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditPosition(false)}
+                  className="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
-          )}
+
+            <div className="col-span-full">
+              <label className="text-[10px] font-bold text-neutral-700 block mb-1">Audit Note / Reason for Change (Optional)</label>
+              <input
+                type="text"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="e.g. Bank statement reconciliation adjustment"
+                className="w-full p-2 bg-white border border-[#E7E7E2] rounded-lg text-xs"
+                maxLength={500}
+              />
+            </div>
+
+            {editPositionError && (
+              <p className="col-span-full text-xs text-[#B94A48] mt-1 font-medium">{editPositionError}</p>
+            )}
+            {editPositionSuccess && (
+              <p className="col-span-full text-xs text-[#244E3D] mt-1 font-medium flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {editPositionSuccess}
+              </p>
+            )}
+          </form>
         </div>
       )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Opening Balance */}
-        <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs">
-          <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">Opening Liquidity</span>
+        <div className="bg-white p-5 rounded-xl border border-[#E7E7E2] shadow-xs relative">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[#8B8D86] font-semibold uppercase tracking-wider block">Opening Liquidity</span>
+            {position && (
+              <button
+                type="button"
+                onClick={handleOpenEditPosition}
+                className="text-[11px] font-semibold text-[#244E3D] hover:text-[#1C3E30] flex items-center gap-1 cursor-pointer bg-[#F5F5F2] hover:bg-[#EBEBE6] px-2 py-0.5 rounded transition-colors"
+                title="Edit verified cash position"
+              >
+                <Edit2 className="w-3 h-3" />
+                <span>Edit</span>
+              </button>
+            )}
+          </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl lg:text-3xl font-extrabold text-[#111111]">
               ₹{openingLakh.toFixed(1)} L

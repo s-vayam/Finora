@@ -21,6 +21,7 @@ from app.models.collection_forecast_override import CollectionForecastOverride
 from app.models.expense_forecast_assumption import ExpenseForecastAssumption
 from app.schemas.cashflow_forecast import (
     CashBalanceSnapshotCreate,
+    CashBalanceSnapshotUpdate,
     CollectionOverrideCreate,
     ExpenseAssumptionCreate,
     ExpenseAssumptionUpdate,
@@ -70,6 +71,80 @@ def record_cash_position(
         notes=payload.notes,
     )
     db.add(snapshot)
+    db.commit()
+    db.refresh(snapshot)
+    return snapshot
+
+
+def update_cash_position(
+    db: Session,
+    snapshot_id: str,
+    payload: CashBalanceSnapshotUpdate,
+) -> CashBalanceSnapshot:
+    """Update an existing cash balance snapshot with audit trails and validation."""
+    snapshot = (
+        db.query(CashBalanceSnapshot)
+        .filter(CashBalanceSnapshot.snapshot_id == snapshot_id)
+        .first()
+    )
+    if not snapshot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Cash balance snapshot '{snapshot_id}' not found.",
+        )
+
+    # Check if as_of_date is changing and would conflict with another existing snapshot
+    if payload.as_of_date and payload.as_of_date != snapshot.as_of_date:
+        existing = (
+            db.query(CashBalanceSnapshot)
+            .filter(
+                CashBalanceSnapshot.company_id == snapshot.company_id,
+                CashBalanceSnapshot.as_of_date == payload.as_of_date,
+                CashBalanceSnapshot.currency == snapshot.currency,
+                CashBalanceSnapshot.snapshot_id != snapshot_id,
+            )
+            .first()
+        )
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Another snapshot already exists for company '{snapshot.company_id}' "
+                    f"on date '{payload.as_of_date}' in currency '{snapshot.currency}' (snapshot_id={existing.snapshot_id})."
+                ),
+            )
+
+    # Audit tracking
+    audit_changes = []
+    if payload.balance_amount is not None and payload.balance_amount != snapshot.balance_amount:
+        audit_changes.append(f"balance: {snapshot.balance_amount} -> {payload.balance_amount}")
+        snapshot.balance_amount = payload.balance_amount
+
+    if payload.minimum_cash_threshold is not None and payload.minimum_cash_threshold != snapshot.minimum_cash_threshold:
+        audit_changes.append(f"threshold: {snapshot.minimum_cash_threshold} -> {payload.minimum_cash_threshold}")
+        snapshot.minimum_cash_threshold = payload.minimum_cash_threshold
+
+    if payload.as_of_date is not None and payload.as_of_date != snapshot.as_of_date:
+        audit_changes.append(f"as_of_date: {snapshot.as_of_date} -> {payload.as_of_date}")
+        snapshot.as_of_date = payload.as_of_date
+
+    if audit_changes:
+        timestamp_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+        reason_str = f" Reason: {payload.notes}" if payload.notes else ""
+        audit_entry = f"[Updated {timestamp_str}: {', '.join(audit_changes)}.{reason_str}]"
+
+        if snapshot.notes:
+            snapshot.notes = f"{snapshot.notes}\n{audit_entry}"
+        else:
+            snapshot.notes = audit_entry
+    elif payload.notes:
+        snapshot.notes = (
+            f"{snapshot.notes}\n[Note {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}]: {payload.notes}"
+            if snapshot.notes
+            else payload.notes
+        )
+
+    snapshot.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(snapshot)
     return snapshot

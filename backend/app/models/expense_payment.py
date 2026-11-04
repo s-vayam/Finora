@@ -31,3 +31,4 @@ class ExpensePayment(Base):
 
     def __repr__(self) -> str:
         return f"<ExpensePayment {self.payment_id}: {self.amount} {self.currency} for {self.expense_id}>"
+

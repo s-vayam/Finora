@@ -19,7 +19,7 @@
 | **Stage 6C** | Predictive cash flow frontend integration | **COMPLETED** | `Phase 6C: Predictive cash flow frontend integration` | `a930f8a` |
 | **Stage 6D** | FX intelligence frontend integration | **COMPLETED** | `Phase 6D: FX intelligence frontend integration` | `2b20ea0` |
 | **Stage 6E** | Overview dashboard backend integration | **COMPLETED** | `Phase 6E: Overview dashboard backend integration` | `452ee5d` |
-| **Stage 6F** | End-to-end testing & product stabilization | **COMPLETED** | `Phase 6F: End-to-end testing and product stabilization` | `977be20` |
+| **Stage 6F** | End-to-end testing & product stabilization | **COMPLETED** | `Phase 6F: End-to-end testing and product stabilization` | `5bbb01b` |
 
 ---
 

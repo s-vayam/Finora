@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from app.models.fx_rate_observation import FxRateObservation
 from app.models.fx_forecast import FxForecast
+from app.models.fx_scenario_run import FxScenarioRun
 from app.models.invoice import Invoice
 from app.models.payment import Payment
 from app.models.expense import Expense
@@ -18,6 +19,8 @@ from app.schemas.fx import (
     FxForecastResponse,
     FxExposureItem,
     FxExposureResponse,
+    FxScenarioRequest,
+    FxScenarioResponse,
 )
 from app.services.trading_calendar import (
     convert_target_date_to_sessions,
@@ -396,4 +399,214 @@ class FxForecastingService:
             unsupported_exposures=unsupported_items,
             total_net_estimated_impact=round(total_net_impact, 2)
         )
+
+    def run_scenario(self, db: Session, req: FxScenarioRequest) -> FxScenarioResponse:
+        pair = req.currency_pair.strip().upper()
+        if pair not in SUPPORTED_PAIRS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unsupported currency pair '{pair}' for scenario analysis. Supported pairs: {SUPPORTED_PAIRS}"
+            )
+        base_curr, quote_curr = pair.split("/")
+
+        # Determine benchmark rate
+        if req.benchmark_rate and req.benchmark_rate > Decimal("0.00"):
+            benchmark_rate = req.benchmark_rate
+        else:
+            bench_obs = db.scalars(
+                select(FxRateObservation).where(
+                    and_(
+                        FxRateObservation.base_currency == base_curr,
+                        FxRateObservation.quote_currency == quote_curr,
+                        FxRateObservation.rate_type == "REFERENCE_DAILY"
+                    )
+                ).order_by(FxRateObservation.observation_date.desc()).limit(1)
+            ).first()
+            if not bench_obs:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No benchmark reference rate available for {pair}."
+                )
+            benchmark_rate = bench_obs.rate_value
+
+        # Calculate scenario rate and percentage change
+        if req.scenario_type == "PERCENTAGE_MOVEMENT":
+            pct = req.percentage_change if req.percentage_change is not None else Decimal("5.0")
+            if pct < Decimal("-25.0") or pct > Decimal("25.0"):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"percentage_change must be bounded between -25% and +25%, got {pct}%."
+                )
+            scenario_rate = round(benchmark_rate * (Decimal("1.0") + (pct / Decimal("100.0"))), 4)
+            percentage_change = pct
+        elif req.scenario_type == "TARGET_RATE":
+            if not req.scenario_rate or req.scenario_rate <= Decimal("0.00"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="scenario_rate must be positive and non-zero for TARGET_RATE scenario."
+                )
+            target = req.scenario_rate
+            pct = round(((target - benchmark_rate) / benchmark_rate) * Decimal("100.0"), 4)
+            if pct < Decimal("-25.0") or pct > Decimal("25.0"):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Target rate {target} results in {pct}% change, which exceeds the allowable +/-25% bounds."
+                )
+            scenario_rate = target
+            percentage_change = pct
+        else:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown scenario_type '{req.scenario_type}'. Must be 'PERCENTAGE_MOVEMENT' or 'TARGET_RATE'."
+            )
+
+        # Retrieve exposures for base_curr
+        # Receivables (invoices != PAID, CANCELLED)
+        invoices = db.scalars(
+            select(Invoice).where(
+                and_(
+                    Invoice.company_id == req.company_id,
+                    Invoice.status.notin_(["PAID", "CANCELLED"]),
+                    Invoice.currency == base_curr
+                )
+            )
+        ).all()
+        rec_amt = Decimal("0.00")
+        for inv in invoices:
+            paid_sum = db.scalar(
+                select(func.coalesce(func.sum(Payment.amount), Decimal("0.00")))
+                .where(Payment.invoice_id == inv.invoice_id)
+            ) or Decimal("0.00")
+            outstanding = max(Decimal("0.00"), inv.invoice_amount - paid_sum)
+            rec_amt += outstanding
+
+        # Payables (expenses != PAID)
+        expenses = db.scalars(
+            select(Expense).where(
+                and_(
+                    Expense.company_id == req.company_id,
+                    Expense.status != "PAID",
+                    Expense.currency == base_curr
+                )
+            )
+        ).all()
+        pay_amt = Decimal("0.00")
+        for exp in expenses:
+            pay_amt += exp.amount
+
+        # Impact calculations
+        rate_delta = scenario_rate - benchmark_rate
+        rec_impact = round(rec_amt * rate_delta, 2)
+        pay_impact = round(-pay_amt * rate_delta, 2)
+        net_impact = rec_impact + pay_impact
+
+        # Comparison with ML forecast
+        comparison = None
+        try:
+            f_req = FxForecastRequest(
+                company_id=req.company_id,
+                currency_pair=pair,
+                horizon_sessions=10
+            )
+            f_res = self.generate_forecast(db, f_req)
+            ml_pct = float(f_res.percentage_movement)
+            scen_pct = float(percentage_change)
+            comparison = {
+                "forecast_id": f_res.forecast_id,
+                "ml_horizon_sessions": 10,
+                "ml_predicted_rate": float(f_res.predicted_rate),
+                "ml_percentage_movement": ml_pct,
+                "ml_predicted_direction": f_res.predicted_direction,
+                "scenario_percentage_change": scen_pct,
+                "divergence_bps": round((scen_pct - ml_pct) * 100, 1),
+                "aligned_direction": (ml_pct * scen_pct > 0)
+            }
+        except Exception as e:
+            logger.debug(f"Could not compute ML comparison for scenario: {e}")
+
+        scenario_id = str(uuid.uuid4())
+        scenario_run = FxScenarioRun(
+            scenario_id=scenario_id,
+            company_id=req.company_id,
+            currency_pair=pair,
+            benchmark_rate=benchmark_rate,
+            scenario_rate=scenario_rate,
+            percentage_change=percentage_change,
+            receivable_exposure=rec_amt,
+            payable_exposure=pay_amt,
+            estimated_receivable_impact=rec_impact,
+            estimated_payable_impact=pay_impact,
+            net_estimated_impact=net_impact,
+            source="SIMULATED"
+        )
+        db.add(scenario_run)
+        db.commit()
+        db.refresh(scenario_run)
+
+        return FxScenarioResponse(
+            scenario_id=scenario_id,
+            company_id=req.company_id,
+            currency_pair=pair,
+            benchmark_rate=round(benchmark_rate, 4),
+            scenario_rate=round(scenario_rate, 4),
+            percentage_change=round(percentage_change, 2),
+            receivable_exposure=round(rec_amt, 2),
+            payable_exposure=round(pay_amt, 2),
+            estimated_receivable_impact=rec_impact,
+            estimated_payable_impact=pay_impact,
+            net_estimated_impact=net_impact,
+            source="SIMULATED",
+            comparison_with_ml=comparison,
+            created_at=scenario_run.created_at
+        )
+
+    def get_scenario_by_id(self, db: Session, scenario_id: str) -> Optional[FxScenarioResponse]:
+        run = db.scalars(
+            select(FxScenarioRun).where(FxScenarioRun.scenario_id == scenario_id)
+        ).first()
+        if not run:
+            return None
+        return FxScenarioResponse(
+            scenario_id=run.scenario_id,
+            company_id=run.company_id,
+            currency_pair=run.currency_pair,
+            benchmark_rate=run.benchmark_rate,
+            scenario_rate=run.scenario_rate,
+            percentage_change=run.percentage_change,
+            receivable_exposure=run.receivable_exposure,
+            payable_exposure=run.payable_exposure,
+            estimated_receivable_impact=run.estimated_receivable_impact,
+            estimated_payable_impact=run.estimated_payable_impact,
+            net_estimated_impact=run.net_estimated_impact,
+            source=run.source,
+            comparison_with_ml=None,
+            created_at=run.created_at
+        )
+
+    def list_scenario_history(self, db: Session, company_id: str, limit: int = 50) -> List[FxScenarioResponse]:
+        runs = db.scalars(
+            select(FxScenarioRun)
+            .where(FxScenarioRun.company_id == company_id)
+            .order_by(FxScenarioRun.created_at.desc())
+            .limit(limit)
+        ).all()
+        return [
+            FxScenarioResponse(
+                scenario_id=r.scenario_id,
+                company_id=r.company_id,
+                currency_pair=r.currency_pair,
+                benchmark_rate=r.benchmark_rate,
+                scenario_rate=r.scenario_rate,
+                percentage_change=r.percentage_change,
+                receivable_exposure=r.receivable_exposure,
+                payable_exposure=r.payable_exposure,
+                estimated_receivable_impact=r.estimated_receivable_impact,
+                estimated_payable_impact=r.estimated_payable_impact,
+                net_estimated_impact=r.net_estimated_impact,
+                source=r.source,
+                comparison_with_ml=None,
+                created_at=r.created_at
+            )
+            for r in runs
+        ]
 

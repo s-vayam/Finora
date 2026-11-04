@@ -18,8 +18,8 @@
 | **Stage 5A** | Historical FX data & DB foundation | **COMPLETED** | `Phase 5A: Historical FX data and database foundation` | `eaca1c0` |
 | **Stage 5B** | Live FX provider & hourly scheduler | **COMPLETED** | `Phase 5B: Live FX provider and hourly scheduler` | `eedd593` |
 | **Stage 5C** | Historical FX ML training & evaluation | **COMPLETED** | `Phase 5C: Historical FX ML training and evaluation` | `e66ac34` |
-| **Stage 5D** | FX forecasting & exposure intelligence | **COMPLETED** | `Phase 5D: FX forecasting and exposure intelligence` | *In-Progress* |
-| **Stage 5E** | FX scenario engine & final audit | **PENDING** | `Phase 5E: FX scenario engine and final audit` | *Pending* |
+| **Stage 5D** | FX forecasting & exposure intelligence | **COMPLETED** | `Phase 5D: FX forecasting and exposure intelligence` | `d84813a` |
+| **Stage 5E** | FX scenario engine & final audit | **COMPLETED** | `Phase 5E: FX scenario engine and final audit` | *Current* |
 
 ---
 
@@ -164,3 +164,39 @@
   - `src/` directory 100% untouched.
   - `npm.cmd run build` succeeded cleanly in 5.00s (0 errors).
 - **Next Permitted Stage:** Stage 5E
+
+---
+
+### Stage 5E: FX Scenario Engine & Final Audit
+- **Start Timestamp:** 2026-11-05 00:44:00
+- **Completion Timestamp:** 2026-11-05 00:50:00
+- **Status:** **COMPLETED & VERIFIED**
+- **Actions & Implementation:**
+  - Implemented what-if scenario simulation in `FxForecastingService`:
+    - Supported percentage movement ($\pm 25\%$) and target rate simulations.
+    - Verified foreign currency exposure impact on open receivables and open payables.
+    - Computed side-by-side comparison with ML model projections (divergence in basis points).
+    - Persisted execution records in `fx_scenario_runs`.
+  - Added REST endpoints in `backend/app/routers/fx.py`:
+    - `POST /api/v1/fx/scenario`: Run what-if scenario simulation.
+    - `GET /api/v1/fx/scenarios/history`: List historical scenario runs for company.
+    - `GET /api/v1/fx/scenarios/{id}`: Retrieve scenario run by UUID.
+  - Implemented Stage 5E test suite `backend/tests/test_fx_scenarios_and_audit.py`:
+    - Positive and negative percentage shifts.
+    - Target rate shifts.
+    - Validation bounds ($\pm 25\%$).
+    - Unsupported currencies.
+    - End-to-end database financial integrity audit.
+  - Succeeded full project regression test suite: **109 / 109 tests passed** in ~2m 29s.
+  - Succeeded frontend production build: **5.41s, 0 errors, 0 warnings**.
+  - Generated comprehensive Phase 5 Completion Report: `backend/phase5_completion_report.md` (covering all 24 required sections).
+- **Audit Verification:**
+  - Invoices: 899 total (873 paid, 26 open).
+  - Customers: 60.
+  - Payments: 873.
+  - Expenses: 872.
+  - Cash Transactions: 1,722.
+  - Monthly Cash Flows: 36.
+  - PRAGMA integrity_check: ok.
+  - PRAGMA foreign_key_check: 0 violations.
+- **Phase 5 Status:** Complete. All 5 stages finished. Working tree clean. Ready for Phase 6 approval.

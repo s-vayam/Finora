@@ -13,6 +13,8 @@ from app.schemas.fx import (
     FxForecastResponse,
     FxExposureResponse,
     FxQuotaStatus,
+    FxScenarioRequest,
+    FxScenarioResponse,
 )
 from app.services.fx_provider_service import FxProviderService
 from app.services.fx_forecasting_service import FxForecastingService
@@ -201,3 +203,31 @@ def get_fx_exposure(
     db: Session = Depends(get_db)
 ):
     return forecasting_service.calculate_fx_exposure(db, company_id=company_id, as_of_date=as_of_date)
+
+
+@router.post("/scenario", response_model=FxScenarioResponse, summary="Simulate what-if FX scenario")
+def simulate_fx_scenario(
+    req: FxScenarioRequest,
+    db: Session = Depends(get_db)
+):
+    return forecasting_service.run_scenario(db, req)
+
+
+@router.get("/scenarios/history", response_model=List[FxScenarioResponse], summary="List persisted FX scenario runs")
+def list_scenario_history(
+    company_id: str = Query("FINORA_DEMO", description="Company ID"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db)
+):
+    return forecasting_service.list_scenario_history(db, company_id=company_id, limit=limit)
+
+
+@router.get("/scenarios/{scenario_id}", response_model=FxScenarioResponse, summary="Get FX scenario run by ID")
+def get_scenario_by_id(
+    scenario_id: str,
+    db: Session = Depends(get_db)
+):
+    sc = forecasting_service.get_scenario_by_id(db, scenario_id)
+    if not sc:
+        raise HTTPException(status_code=404, detail=f"Scenario run with ID '{scenario_id}' not found.")
+    return sc

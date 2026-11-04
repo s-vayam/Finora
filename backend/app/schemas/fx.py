@@ -127,3 +127,7 @@ class FxScenarioResponse(BaseModel):
     net_estimated_impact: Decimal
     source: str = "SIMULATED"
     comparison_with_ml: Optional[Dict[str, Any]] = None
+    created_at: Optional[datetime] = None
+    disclaimer: str = Field(
+        default="Simulated what-if scenario. Not financial advice or an execution guarantee."
+    )

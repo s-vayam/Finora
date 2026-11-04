@@ -17,6 +17,7 @@ class Company(Base):
     expenses = relationship("Expense", back_populates="company", cascade="all, delete-orphan")
     cash_transactions = relationship("CashTransaction", back_populates="company", cascade="all, delete-orphan")
     monthly_cashflows = relationship("MonthlyCashflow", back_populates="company", cascade="all, delete-orphan")
+    payments = relationship("Payment", back_populates="company", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Company {self.company_id}: {self.company_name}>"

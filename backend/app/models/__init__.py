@@ -5,6 +5,7 @@ from app.models.invoice import Invoice
 from app.models.expense import Expense
 from app.models.cash_transaction import CashTransaction
 from app.models.monthly_cashflow import MonthlyCashflow
+from app.models.payment import Payment
 
 __all__ = [
     "Base",
@@ -14,5 +15,5 @@ __all__ = [
     "Expense",
     "CashTransaction",
     "MonthlyCashflow",
+    "Payment",
 ]
-

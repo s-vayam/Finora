@@ -71,9 +71,11 @@ def client(test_db_session: Session) -> Generator[TestClient, None, None]:
 
 @pytest.fixture(scope="function")
 def seeded_test_db(test_db_session: Session, raw_data_dir: Path) -> Session:
-    """Test database pre-seeded with synthetic financial dataset."""
+    """Test database pre-seeded with synthetic financial dataset and backfilled payments."""
     service = DataImportService(data_dir=raw_data_dir, db=test_db_session)
     service.import_all(dry_run=False, force=False)
+    from app.services.payment_backfill_service import PaymentBackfillService
+    PaymentBackfillService(db=test_db_session).validate_and_backfill(dry_run=False, force=False)
     return test_db_session
 
 @pytest.fixture(scope="function")

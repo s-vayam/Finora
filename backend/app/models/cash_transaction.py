@@ -18,6 +18,7 @@ class CashTransaction(Base):
 
     company = relationship("Company", back_populates="cash_transactions")
     linked_invoice = relationship("Invoice", back_populates="transactions")
+    payment = relationship("Payment", back_populates="cash_transaction", uselist=False)
 
     def __repr__(self) -> str:
         return f"<CashTransaction {self.transaction_id}: {self.transaction_type} {self.amount} {self.currency}>"

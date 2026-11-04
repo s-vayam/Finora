@@ -10,6 +10,7 @@ from app.models.invoice import Invoice
 from app.models.expense import Expense
 from app.models.cash_transaction import CashTransaction
 from app.models.monthly_cashflow import MonthlyCashflow
+from app.models.payment import Payment
 from app.schemas.common import SeedStatusResponse, DataSummaryResponse, DateRange
 
 router = APIRouter(prefix="/meta", tags=["Metadata"])
@@ -33,6 +34,7 @@ def get_seed_status(db: Session = Depends(get_db)):
         "expenses": db.query(func.count(Expense.expense_id)).filter(Expense.company_id == "FINORA_DEMO").scalar() or 0,
         "cash_transactions": db.query(func.count(CashTransaction.transaction_id)).filter(CashTransaction.company_id == "FINORA_DEMO").scalar() or 0,
         "monthly_cashflow": db.query(func.count(MonthlyCashflow.id)).filter(MonthlyCashflow.company_id == "FINORA_DEMO").scalar() or 0,
+        "payments": db.query(func.count(Payment.payment_id)).filter(Payment.company_id == "FINORA_DEMO").scalar() or 0,
     }
 
     return SeedStatusResponse(

@@ -16,6 +16,7 @@ from app.routers import (
     expenses_router,
     transactions_router,
     cashflow_router,
+    payments_router,
 )
 
 # Configure logging
@@ -90,6 +91,7 @@ app.include_router(invoices_router, prefix=v1_prefix)
 app.include_router(expenses_router, prefix=v1_prefix)
 app.include_router(transactions_router, prefix=v1_prefix)
 app.include_router(cashflow_router, prefix=v1_prefix)
+app.include_router(payments_router, prefix=v1_prefix)
 
 # Root endpoint redirecting or pointing to docs
 @app.get("/", tags=["Root"])

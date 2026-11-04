@@ -22,6 +22,7 @@ class Invoice(Base):
     customer = relationship("Customer", back_populates="invoices")
     expenses = relationship("Expense", back_populates="linked_invoice")
     transactions = relationship("CashTransaction", back_populates="linked_invoice")
+    payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan", order_by="Payment.payment_date.asc()")
 
     def __repr__(self) -> str:
         return f"<Invoice {self.invoice_id}: {self.invoice_amount} {self.currency} ({self.status})>"

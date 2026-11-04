@@ -25,6 +25,9 @@ export interface Invoice {
   description: string;
   shippingReference: string;
   contactEmail: string;
+  amountPaid?: number;
+  outstandingBalance?: number;
+  backendStatus?: string;
 }
 
 export type DocumentStatus = 'Complete' | 'Pending' | 'Missing';

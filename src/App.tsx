@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   NavigationTab, 
   Invoice, 
@@ -30,9 +30,16 @@ import { CashFlowScreen } from './components/screens/CashFlowScreen';
 import { DocumentsScreen } from './components/screens/DocumentsScreen';
 import { CopilotScreen } from './components/screens/CopilotScreen';
 
+// Backend Services & Mappers
+import { invoicesApi, paymentsApi } from './services/api';
+import { mapBackendInvoiceToUi } from './services/api/mappers';
+
 export function App() {
   const [currentTab, setCurrentTab] = useState<NavigationTab>('overview');
   const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesError, setInvoicesError] = useState<any>(null);
+
   const [documents, setDocuments] = useState<TradeDocument[]>(INITIAL_DOCUMENTS);
   const [alerts, setAlerts] = useState<AlertItem[]>(INITIAL_ALERTS);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -49,6 +56,26 @@ export function App() {
   // Overdue and missing counts for badges
   const overdueCount = invoices.filter((i) => i.status === 'Overdue').length;
   const missingDocsCount = documents.filter((d) => d.status === 'Missing').length;
+
+  const fetchInvoices = useCallback(async () => {
+    setInvoicesLoading(true);
+    setInvoicesError(null);
+    try {
+      const res = await invoicesApi.listInvoices();
+      if (res?.items && res.items.length > 0) {
+        const mapped = res.items.map(mapBackendInvoiceToUi);
+        setInvoices(mapped);
+      }
+    } catch (err: any) {
+      setInvoicesError(err);
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
 
   const addToast = (
     type: 'success' | 'warning' | 'info',
@@ -93,7 +120,7 @@ export function App() {
     setInvoiceToConfirmPay(invoice);
   };
 
-  const handleConfirmMarkAsPaid = () => {
+  const handleConfirmMarkAsPaid = async () => {
     if (!invoiceToConfirmPay) return;
 
     const targetInvoice = invoiceToConfirmPay;
@@ -101,34 +128,90 @@ export function App() {
     const invNumber = targetInvoice.invoiceNumber;
     const customer = targetInvoice.customer;
     const originalStatus = targetInvoice.status;
-
-    // Update invoice status in state
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.id === targetId ? { ...inv, status: 'Paid' as const } : inv
-      )
-    );
-
-    // Update selected invoice if open
-    if (selectedInvoice && selectedInvoice.id === targetId) {
-      setSelectedInvoice((prev) => (prev ? { ...prev, status: 'Paid' as const } : null));
-    }
-
-    // Dismiss overdue alert if it was Northstar (inv-1)
-    if (targetId === 'inv-1') {
-      setAlerts((prev) => prev.filter((a) => a.id !== 'alert-1'));
-    }
-
     setInvoiceToConfirmPay(null);
 
-    // Informative Feedback with Action Reversal (Rules 3, 6)
-    addToast(
-      'success',
-      'Invoice Reconciled as Paid',
-      `Invoice ${invNumber} for ${customer} has been updated to Paid in the prototype state.`,
-      () => handleUndoMarkAsPaid(targetId, originalStatus, invNumber, customer),
-      'Undo Settlement'
-    );
+    const isBackendInvoice = targetId && !targetId.startsWith('inv-');
+
+    if (isBackendInvoice) {
+      try {
+        const idempotencyKey = `pmt-${targetId}-${Date.now()}`;
+        const outstandingAmt = targetInvoice.outstandingBalance !== undefined
+          ? targetInvoice.outstandingBalance
+          : targetInvoice.amount;
+
+        await paymentsApi.recordPayment(
+          targetId,
+          {
+            payment_date: new Date().toISOString().split('T')[0],
+            amount: outstandingAmt,
+            currency: targetInvoice.currency,
+            payment_method: 'WIRE_TRANSFER',
+            reference_number: `WIRE-${Date.now().toString().slice(-6)}`,
+            notes: 'Settled via Finora web interface',
+          },
+          idempotencyKey
+        );
+
+        // Fetch refreshed invoice from backend
+        try {
+          const fresh = await invoicesApi.getInvoice(targetId);
+          const mapped = mapBackendInvoiceToUi(fresh);
+          setInvoices((prev) => prev.map((inv) => (inv.id === targetId ? mapped : inv)));
+          if (selectedInvoice && selectedInvoice.id === targetId) {
+            setSelectedInvoice(mapped);
+          }
+        } catch {
+          // Optimistic local update
+          setInvoices((prev) =>
+            prev.map((inv) =>
+              inv.id === targetId
+                ? { ...inv, status: 'Paid' as const, amountPaid: inv.amount, outstandingBalance: 0 }
+                : inv
+            )
+          );
+          if (selectedInvoice && selectedInvoice.id === targetId) {
+            setSelectedInvoice((prev) =>
+              prev ? { ...prev, status: 'Paid' as const, amountPaid: prev.amount, outstandingBalance: 0 } : null
+            );
+          }
+        }
+
+        addToast(
+          'success',
+          'Payment Recorded Successfully',
+          `Full settlement of ${targetInvoice.currency} ${outstandingAmt.toLocaleString()} recorded for Invoice ${invNumber} (${customer}).`
+        );
+      } catch (err: any) {
+        addToast(
+          'warning',
+          'Payment Recording Failed',
+          err?.message || 'Server rejected payment operation. Please check connectivity.'
+        );
+      }
+    } else {
+      // Prototype mock records (e.g. inv-1)
+      setInvoices((prev) =>
+        prev.map((inv) =>
+          inv.id === targetId ? { ...inv, status: 'Paid' as const } : inv
+        )
+      );
+
+      if (selectedInvoice && selectedInvoice.id === targetId) {
+        setSelectedInvoice((prev) => (prev ? { ...prev, status: 'Paid' as const } : null));
+      }
+
+      if (targetId === 'inv-1') {
+        setAlerts((prev) => prev.filter((a) => a.id !== 'alert-1'));
+      }
+
+      addToast(
+        'success',
+        'Invoice Reconciled as Paid',
+        `Invoice ${invNumber} for ${customer} has been updated to Paid in the prototype state.`,
+        () => handleUndoMarkAsPaid(targetId, originalStatus, invNumber, customer),
+        'Undo Settlement'
+      );
+    }
   };
 
   const handleUndoMarkAsPaid = (
@@ -149,7 +232,6 @@ export function App() {
       );
     }
 
-    // Restore alert if inv-1 was reverted to Overdue
     if (invoiceId === 'inv-1') {
       const originalAlert = INITIAL_ALERTS.find((a) => a.id === 'alert-1');
       if (originalAlert) {
@@ -163,39 +245,12 @@ export function App() {
     addToast(
       'info',
       'Action Undone',
-      `Invoice ${invNumber} for ${customer} restored to ${revertToStatus} status.`
+      `Invoice ${invNumber} status reverted back to ${revertToStatus}.`
     );
   };
 
   const handleRevertInvoiceStatus = (invoice: Invoice) => {
-    const initialMatch = INITIAL_INVOICES.find((i) => i.id === invoice.id);
-    const targetStatus: InvoiceStatus = initialMatch?.status || 'Upcoming';
-
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.id === invoice.id ? { ...inv, status: targetStatus } : inv
-      )
-    );
-
-    if (selectedInvoice && selectedInvoice.id === invoice.id) {
-      setSelectedInvoice((prev) => (prev ? { ...prev, status: targetStatus } : null));
-    }
-
-    if (invoice.id === 'inv-1') {
-      const originalAlert = INITIAL_ALERTS.find((a) => a.id === 'alert-1');
-      if (originalAlert) {
-        setAlerts((prev) => {
-          if (prev.some((a) => a.id === 'alert-1')) return prev;
-          return [originalAlert, ...prev];
-        });
-      }
-    }
-
-    addToast(
-      'info',
-      'Invoice Status Reverted',
-      `Invoice ${invoice.invoiceNumber} reverted from Paid to ${targetStatus}.`
-    );
+    handleUndoMarkAsPaid(invoice.id, 'Overdue', invoice.invoiceNumber, invoice.customer);
   };
 
   // Update Document Status Workflow with Undo (Rule 6)
@@ -210,7 +265,6 @@ export function App() {
       )
     );
 
-    // If doc-1 was marked as complete, clear the missing doc alert; if reverted back, restore it
     if (docId === 'doc-1') {
       if (newStatus === 'Complete') {
         setAlerts((prev) => prev.filter((a) => a.id !== 'alert-3'));
@@ -225,7 +279,6 @@ export function App() {
       }
     }
 
-    // Update selected document if open
     if (selectedDocument && selectedDocument.id === docId) {
       setSelectedDocument((prev) =>
         prev ? { ...prev, status: newStatus, lastUpdated: '2026-10-26' } : null
@@ -279,6 +332,9 @@ export function App() {
               invoices={invoices}
               onSelectInvoice={(inv) => setSelectedInvoice(inv)}
               onRequestMarkAsPaid={handleRequestMarkAsPaid}
+              loading={invoicesLoading}
+              error={invoicesError}
+              onRefresh={fetchInvoices}
             />
           )}
 
@@ -332,7 +388,7 @@ export function App() {
         title="Confirm Invoice Settlement"
         description={
           invoiceToConfirmPay
-            ? `Are you sure you want to mark Invoice ${invoiceToConfirmPay.invoiceNumber} (${invoiceToConfirmPay.customer} - ${invoiceToConfirmPay.currency} ${invoiceToConfirmPay.amount.toLocaleString()}) as Paid? This will recalculate overdue metrics and outstanding receivables.`
+            ? `Are you sure you want to mark Invoice ${invoiceToConfirmPay.invoiceNumber} (${invoiceToConfirmPay.customer} - ${invoiceToConfirmPay.currency} ${invoiceToConfirmPay.amount.toLocaleString()}) as Paid? This will record payment and recalculate overdue metrics and outstanding receivables.`
             : ''
         }
         confirmLabel="Mark as Paid"

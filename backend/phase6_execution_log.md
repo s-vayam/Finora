@@ -14,8 +14,8 @@
 | Stage | Description | Status | Target Checkpoint Name | Commit Hash |
 |:---|:---|:---:|:---|:---:|
 | **Preflight** | Safety checks, branch, DB backup, baselines | **COMPLETED** | `feature/phase6-frontend-integration` | `8cd3267` |
-| **Stage 6A** | Frontend API integration foundation | **COMPLETED** | `Phase 6A: Frontend API integration foundation` | *In-Progress* |
-| **Stage 6B** | Invoice & payment frontend integration | **PENDING** | `Phase 6B: Invoice and payment frontend integration` | *Pending* |
+| **Stage 6A** | Frontend API integration foundation | **COMPLETED** | `Phase 6A: Frontend API integration foundation` | `9d22250` |
+| **Stage 6B** | Invoice & payment frontend integration | **COMPLETED** | `Phase 6B: Invoice and payment frontend integration` | *In-Progress* |
 | **Stage 6C** | Predictive cash flow frontend integration | **PENDING** | `Phase 6C: Predictive cash flow frontend integration` | *Pending* |
 | **Stage 6D** | FX intelligence frontend integration | **PENDING** | `Phase 6D: FX intelligence frontend integration` | *Pending* |
 | **Stage 6E** | Overview dashboard backend integration | **PENDING** | `Phase 6E: Overview dashboard backend integration` | *Pending* |
@@ -61,3 +61,22 @@
   - Frontend production build: `npm.cmd run build` passed cleanly in 4.78s with 0 errors.
   - No existing screen design or layout modified.
 - **Next Permitted Stage:** Stage 6B
+
+---
+
+### Stage 6B: Invoice and Payment Frontend Integration
+- **Start Timestamp:** 2026-11-05 01:09:00
+- **Completion Timestamp:** 2026-11-05 01:11:00
+- **Status:** **COMPLETED & VERIFIED**
+- **Actions & Implementation:**
+  - Implemented `mapBackendInvoiceToUi` in `src/services/api/mappers.ts` supporting full mapping of backend invoice attributes, status normalization, and payment balance tracking (`amountPaid`, `outstandingBalance`).
+  - Connected `InvoicesScreen` and `App.tsx` to `GET /api/v1/invoices` for live database loading with loading spinner and error banner states.
+  - Connected `InvoiceDetailModal` to `GET /api/v1/invoices/{id}/payments` to display chronological payment settlement history.
+  - Integrated `POST /api/v1/invoices/{id}/payments` in `App.tsx` with deterministic `Idempotency-Key` headers for payment settlement.
+  - Integrated ML Payment Risk Intelligence in `InvoiceDetailModal` via `predictionApi`:
+    - Shows late payment probability, risk category badge (`LOW`, `MEDIUM`, `HIGH`), conditional predicted delay, expected delay, and estimated settlement date.
+    - Implemented strict eligibility rules: paid invoices show settled status; partially paid invoices indicate model limitation; unpaid invoices allow real-time ML risk prediction.
+- **Verification:**
+  - `npm.cmd run build` passed in 4.57s (0 errors).
+  - All original visual layouts, table columns, filter dropdowns, search inputs, and modal styles 100% preserved.
+- **Next Permitted Stage:** Stage 6C

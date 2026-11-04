@@ -4,22 +4,30 @@ import {
   X, 
   Eye, 
   CheckCircle2,
-  ArrowUpDown
+  ArrowUpDown,
+  RefreshCw
 } from 'lucide-react';
 import { Invoice } from '../../types';
 import { StatusBadge } from '../common/Badge';
 import { EXCHANGE_RATES } from '../../data/mockData';
+import { LoadingState, ErrorBanner } from '../common/ApiStateHelpers';
 
 interface InvoicesScreenProps {
   invoices: Invoice[];
   onSelectInvoice: (invoice: Invoice) => void;
   onRequestMarkAsPaid: (invoice: Invoice) => void;
+  loading?: boolean;
+  error?: any;
+  onRefresh?: () => void;
 }
 
 export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
   invoices,
   onSelectInvoice,
   onRequestMarkAsPaid,
+  loading = false,
+  error = null,
+  onRefresh,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -78,7 +86,21 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
       {/* Header & Status Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-[#E7E7E2]">
         <div>
-          <h2 className="text-xl lg:text-2xl font-bold text-[#111111] tracking-tight">Invoices & Payments</h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-xl lg:text-2xl font-bold text-[#111111] tracking-tight">Invoices & Payments</h2>
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={loading}
+                className="p-1 text-[#8B8D86] hover:text-[#111111] rounded hover:bg-[#EBEBE6] transition-colors cursor-pointer"
+                title="Refresh invoices from backend"
+                aria-label="Refresh invoices"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
           <p className="text-xs text-[#8B8D86] mt-1">
             Manage international export trade invoices, track payment status, and record settlement.
           </p>
@@ -88,7 +110,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
         <div className="flex items-center gap-2 text-xs flex-wrap">
           <button
             onClick={() => setStatusFilter('All')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
               statusFilter === 'All'
                 ? 'bg-[#111111] text-white border-[#111111]'
                 : 'bg-white text-[#8B8D86] border-[#E7E7E2] hover:bg-[#F5F5F2] hover:text-[#111111]'
@@ -98,7 +120,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
           </button>
           <button
             onClick={() => setStatusFilter('Overdue')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
               statusFilter === 'Overdue'
                 ? 'bg-[#B94A48] text-white border-[#B94A48]'
                 : 'bg-[#FDF2F2] text-[#B94A48] border-[#F6CECE] hover:bg-[#FBE4E4]'
@@ -108,7 +130,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
           </button>
           <button
             onClick={() => setStatusFilter('Due soon')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
               statusFilter === 'Due soon'
                 ? 'bg-[#A87524] text-white border-[#A87524]'
                 : 'bg-[#FEF8EC] text-[#A87524] border-[#F5DCB2] hover:bg-[#FDF0D5]'
@@ -118,7 +140,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
           </button>
           <button
             onClick={() => setStatusFilter('Upcoming')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
               statusFilter === 'Upcoming'
                 ? 'bg-[#111111] text-white border-[#111111]'
                 : 'bg-white text-[#8B8D86] border-[#E7E7E2] hover:bg-[#F5F5F2]'
@@ -128,7 +150,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
           </button>
           <button
             onClick={() => setStatusFilter('Paid')}
-            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors cursor-pointer ${
               statusFilter === 'Paid'
                 ? 'bg-[#39765A] text-white border-[#39765A]'
                 : 'bg-[#EDF7F2] text-[#39765A] border-[#BDE3D1] hover:bg-[#DCF1E6]'
@@ -138,6 +160,9 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Error state if API call failed */}
+      {error && <ErrorBanner error={error} onRetry={onRefresh} />}
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-xl border border-[#E7E7E2] shadow-xs space-y-3">
@@ -199,7 +224,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
             {(searchTerm || statusFilter !== 'All' || currencyFilter !== 'All') ? (
               <button
                 onClick={handleClearFilters}
-                className="text-xs text-[#B94A48] hover:underline font-semibold flex items-center gap-1"
+                className="text-xs text-[#B94A48] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
                 Reset filters
@@ -215,7 +240,9 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
 
       {/* Main Table */}
       <div className="bg-white rounded-xl border border-[#E7E7E2] shadow-xs overflow-hidden">
-        {filteredInvoices.length > 0 ? (
+        {loading && invoices.length === 0 ? (
+          <LoadingState label="Loading invoices from backend..." />
+        ) : filteredInvoices.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
@@ -332,7 +359,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             onClick={() => onSelectInvoice(inv)}
-                            className="px-2.5 py-1 text-[11px] font-bold text-[#111111] bg-white hover:bg-[#F5F5F2] rounded-lg border border-[#E7E7E2] transition-colors inline-flex items-center gap-1"
+                            className="px-2.5 py-1 text-[11px] font-bold text-[#111111] bg-white hover:bg-[#F5F5F2] rounded-lg border border-[#E7E7E2] transition-colors inline-flex items-center gap-1 cursor-pointer"
                             title="View Invoice Details"
                           >
                             <Eye className="w-3 h-3 text-[#111111]" />
@@ -341,7 +368,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
                           {inv.status !== 'Paid' && (
                             <button
                               onClick={() => onRequestMarkAsPaid(inv)}
-                              className="px-2.5 py-1 text-[11px] font-bold text-[#111111] bg-[#D9F83F] hover:bg-[#c8ea2e] rounded-lg border border-[#D9F83F] transition-colors inline-flex items-center gap-1 shadow-xs"
+                              className="px-2.5 py-1 text-[11px] font-bold text-[#111111] bg-[#D9F83F] hover:bg-[#c8ea2e] rounded-lg border border-[#D9F83F] transition-colors inline-flex items-center gap-1 shadow-xs cursor-pointer"
                               title="Mark as Paid"
                             >
                               <CheckCircle2 className="w-3 h-3 text-[#111111]" />
@@ -367,7 +394,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({
             </p>
             <button
               onClick={handleClearFilters}
-              className="mt-4 px-4 py-2 text-xs font-bold text-[#111111] bg-[#D9F83F] hover:bg-[#c8ea2e] rounded-lg transition-colors"
+              className="mt-4 px-4 py-2 text-xs font-bold text-[#111111] bg-[#D9F83F] hover:bg-[#c8ea2e] rounded-lg transition-colors cursor-pointer"
             >
               Reset Filters
             </button>

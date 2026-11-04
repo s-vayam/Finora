@@ -137,3 +137,4 @@ The exact deficit warning shown on the dashboard ($-1,444,727.52\text{ INR}$) no
 4. **Live Integration Check:**
    - Background processes running: FastAPI on `127.0.0.1:8000`, Vite on `127.0.0.1:3000`.
    - Verified live API endpoints returning valid status 200, formatted numbers, and 0 occurrences of `NaN`.
+

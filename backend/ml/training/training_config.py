@@ -5,6 +5,8 @@ Training Configuration for Finora ML Payment Risk Engine.
 from dataclasses import dataclass
 from pathlib import Path
 
+_BASE_ML_DIR = Path(__file__).resolve().parent.parent
+
 
 @dataclass(frozen=True)
 class TrainingConfig:
@@ -30,17 +32,17 @@ class TrainingConfig:
     # Default threshold for late payment classification
     default_classification_threshold: float = 0.50
 
-    # Paths
-    artifacts_dir: Path = Path("backend/ml/artifacts")
-    metadata_dir: Path = Path("backend/ml/metadata")
-    processed_dir: Path = Path("backend/ml/processed")
+    # Paths (dynamically resolved to absolute paths relative to ml/ directory)
+    artifacts_dir: Path = _BASE_ML_DIR / "artifacts"
+    metadata_dir: Path = _BASE_ML_DIR / "metadata"
+    processed_dir: Path = _BASE_ML_DIR / "processed"
 
-    classifier_artifact: Path = Path("backend/ml/artifacts/payment_classifier.joblib")
-    regressor_artifact: Path = Path("backend/ml/artifacts/payment_delay_regressor.joblib")
-    feature_pipeline_artifact: Path = Path("backend/ml/artifacts/feature_pipeline.joblib")
-    model_metadata_file: Path = Path("backend/ml/artifacts/model_metadata.json")
-    evaluation_metrics_file: Path = Path("backend/ml/artifacts/evaluation_metrics.json")
-    feature_importance_file: Path = Path("backend/ml/artifacts/feature_importance.json")
+    classifier_artifact: Path = _BASE_ML_DIR / "artifacts" / "payment_classifier.joblib"
+    regressor_artifact: Path = _BASE_ML_DIR / "artifacts" / "payment_delay_regressor.joblib"
+    feature_pipeline_artifact: Path = _BASE_ML_DIR / "artifacts" / "feature_pipeline.joblib"
+    model_metadata_file: Path = _BASE_ML_DIR / "artifacts" / "model_metadata.json"
+    evaluation_metrics_file: Path = _BASE_ML_DIR / "artifacts" / "evaluation_metrics.json"
+    feature_importance_file: Path = _BASE_ML_DIR / "artifacts" / "feature_importance.json"
 
 
 CONFIG = TrainingConfig()

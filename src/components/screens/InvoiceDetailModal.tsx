@@ -317,25 +317,25 @@ export const InvoiceDetailModal: React.FC<InvoiceDetailModalProps> = ({
                   <div>
                     <span className="text-[10px] text-[#8B8D86] block">Late Probability</span>
                     <span className="text-sm font-bold text-[#111111]">
-                      {(prediction.late_probability * 100).toFixed(1)}%
+                      {((prediction.late_probability ?? (prediction as any).predicted_late_probability ?? 0) * 100).toFixed(1)}%
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-[#8B8D86] block">Expected Delay</span>
                     <span className="text-sm font-bold text-[#111111]">
-                      +{prediction.expected_delay_days.toFixed(1)} days
+                      +{Number(prediction.expected_delay_days ?? 0).toFixed(1)} days
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-[#8B8D86] block">Conditional Delay</span>
                     <span className="text-sm font-bold text-[#111111]">
-                      +{prediction.predicted_delay_days.toFixed(1)} days
+                      +{Number(prediction.predicted_delay_days ?? 0).toFixed(1)} days
                     </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-[#8B8D86] block">Est. Collection Date</span>
                     <span className="text-sm font-bold text-[#111111]">
-                      {prediction.estimated_payment_date}
+                      {prediction.estimated_payment_date || 'N/A'}
                     </span>
                   </div>
                 </div>

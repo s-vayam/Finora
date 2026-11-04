@@ -9,6 +9,7 @@ and persisting prediction records.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Session
 from app.models.invoice import Invoice
 from app.models.payment import Payment
 from app.models.ml_prediction import MLPrediction
+
+logger = logging.getLogger("finora.ml")
 
 try:
     from backend.ml.training.training_config import CONFIG
@@ -52,33 +55,57 @@ class PredictionEngine:
             cls._instance = cls()
         return cls._instance
 
+    def _resolve_artifact_path(self, target_filename: str) -> Path:
+        """Find target artifact file across common repository layouts."""
+        candidates = [
+            CONFIG.artifacts_dir / target_filename,
+            Path(__file__).resolve().parent.parent.parent / "ml" / "artifacts" / target_filename,
+            Path("backend/ml/artifacts") / target_filename,
+            Path("ml/artifacts") / target_filename,
+        ]
+        for c in candidates:
+            if c.exists():
+                return c.resolve()
+        return (CONFIG.artifacts_dir / target_filename).resolve()
+
     def _load_artifacts(self) -> None:
         try:
-            if (
-                CONFIG.feature_pipeline_artifact.exists()
-                and CONFIG.classifier_artifact.exists()
-                and CONFIG.regressor_artifact.exists()
-            ):
-                self.pipeline = joblib.load(CONFIG.feature_pipeline_artifact)
-                self.classifier = joblib.load(CONFIG.classifier_artifact)
-                self.regressor = joblib.load(CONFIG.regressor_artifact)
+            pipe_path = self._resolve_artifact_path("feature_pipeline.joblib")
+            clf_path = self._resolve_artifact_path("payment_classifier.joblib")
+            reg_path = self._resolve_artifact_path("payment_delay_regressor.joblib")
+            meta_path = self._resolve_artifact_path("model_metadata.json")
+            metrics_path = self._resolve_artifact_path("evaluation_metrics.json")
+            importance_path = self._resolve_artifact_path("feature_importance.json")
 
-                if CONFIG.model_metadata_file.exists():
-                    with open(CONFIG.model_metadata_file, "r", encoding="utf-8") as f:
-                        self.metadata = json.load(f)
+            logger.info("Resolving ML artifacts: pipeline=%s, classifier=%s, regressor=%s", pipe_path, clf_path, reg_path)
 
-                if CONFIG.evaluation_metrics_file.exists():
-                    with open(CONFIG.evaluation_metrics_file, "r", encoding="utf-8") as f:
-                        self.metrics = json.load(f)
+            missing = [str(p) for p in [pipe_path, clf_path, reg_path] if not p.exists()]
+            if missing:
+                logger.error("Required ML model artifacts missing from filesystem: %s", missing)
+                self.is_loaded = False
+                return
 
-                if CONFIG.feature_importance_file.exists():
-                    with open(CONFIG.feature_importance_file, "r", encoding="utf-8") as f:
-                        self.feature_importance = json.load(f)
+            self.pipeline = joblib.load(pipe_path)
+            self.classifier = joblib.load(clf_path)
+            self.regressor = joblib.load(reg_path)
 
-                self.is_loaded = True
+            if meta_path.exists():
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    self.metadata = json.load(f)
+
+            if metrics_path.exists():
+                with open(metrics_path, "r", encoding="utf-8") as f:
+                    self.metrics = json.load(f)
+
+            if importance_path.exists():
+                with open(importance_path, "r", encoding="utf-8") as f:
+                    self.feature_importance = json.load(f)
+
+            self.is_loaded = True
+            logger.info("Successfully loaded ML models (version %s).", self.metadata.get("model_version", "v1.0.0"))
         except Exception as e:
             self.is_loaded = False
-            print(f"Warning: Failed to load ML artifacts: {e}")
+            logger.error("Failed to load ML artifacts: %s", str(e), exc_info=True)
 
     def ensure_loaded(self) -> None:
         if not self.is_loaded or self.classifier is None or self.regressor is None:
@@ -99,12 +126,17 @@ def format_prediction_dict(pred: MLPrediction) -> Dict[str, Any]:
         except Exception:
             snapshot = {"raw": pred.features_snapshot}
 
+    ts = pred.prediction_timestamp
+    created_dt = pred.created_at if hasattr(pred, "created_at") and pred.created_at else ts
     return {
         "id": pred.id,
+        "prediction_id": f"PRD-{pred.id}",
         "invoice_id": pred.invoice_id,
-        "prediction_timestamp": pred.prediction_timestamp,
+        "prediction_timestamp": ts,
+        "created_at": created_dt,
         "model_version": pred.model_version,
         "predicted_late_probability": float(pred.predicted_late_probability),
+        "late_probability": float(pred.predicted_late_probability),
         "risk_category": pred.risk_category,
         "predicted_delay_days": float(pred.predicted_delay_days),
         "expected_delay_days": float(pred.expected_delay_days),

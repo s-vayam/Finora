@@ -22,10 +22,13 @@ class PaymentRiskPredictionRequest(BaseModel):
 
 class PaymentRiskPredictionResponse(BaseModel):
     id: int
+    prediction_id: Optional[str] = None
     invoice_id: str
     prediction_timestamp: datetime
+    created_at: Optional[datetime] = None
     model_version: str
     predicted_late_probability: float = Field(..., ge=0.0, le=1.0)
+    late_probability: Optional[float] = Field(None, ge=0.0, le=1.0, description="Convenience alias for predicted_late_probability")
     risk_category: RiskCategory
     predicted_delay_days: float = Field(..., ge=0.0, description="Conditional delay days if late")
     expected_delay_days: float = Field(..., ge=0.0, description="Probability-weighted delay days")

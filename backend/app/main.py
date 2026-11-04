@@ -35,6 +35,18 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up Finora API...")
     init_db()
     logger.info("Database initialized successfully.")
+
+    # Eagerly initialize and verify ML payment risk prediction engine
+    try:
+        from app.services.payment_prediction_service import PredictionEngine
+        engine = PredictionEngine.get_instance()
+        if engine.is_loaded:
+            logger.info("Payment risk ML models loaded successfully during startup.")
+        else:
+            logger.warning("Payment risk ML models could not be loaded at startup.")
+    except Exception as e:
+        logger.warning("Failed initializing ML engine during startup: %s", e)
+
     yield
     logger.info("Shutting down Finora API...")
 

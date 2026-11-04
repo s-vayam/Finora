@@ -7,6 +7,10 @@ from app.models.cash_transaction import CashTransaction
 from app.models.monthly_cashflow import MonthlyCashflow
 from app.models.payment import Payment
 from app.models.ml_prediction import MLPrediction
+from app.models.cash_balance_snapshot import CashBalanceSnapshot
+from app.models.collection_forecast_override import CollectionForecastOverride
+from app.models.expense_forecast_assumption import ExpenseForecastAssumption
+from app.models.cashflow_forecast_run import CashflowForecastRun
 
 __all__ = [
     "Base",
@@ -18,4 +22,8 @@ __all__ = [
     "MonthlyCashflow",
     "Payment",
     "MLPrediction",
+    "CashBalanceSnapshot",
+    "CollectionForecastOverride",
+    "ExpenseForecastAssumption",
+    "CashflowForecastRun",
 ]

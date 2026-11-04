@@ -18,6 +18,10 @@ class Company(Base):
     cash_transactions = relationship("CashTransaction", back_populates="company", cascade="all, delete-orphan")
     monthly_cashflows = relationship("MonthlyCashflow", back_populates="company", cascade="all, delete-orphan")
     payments = relationship("Payment", back_populates="company", cascade="all, delete-orphan")
+    cash_balance_snapshots = relationship("CashBalanceSnapshot", back_populates="company", cascade="all, delete-orphan")
+    collection_overrides = relationship("CollectionForecastOverride", back_populates="company", cascade="all, delete-orphan")
+    expense_assumptions = relationship("ExpenseForecastAssumption", back_populates="company", cascade="all, delete-orphan")
+    forecast_runs = relationship("CashflowForecastRun", back_populates="company", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Company {self.company_id}: {self.company_name}>"
